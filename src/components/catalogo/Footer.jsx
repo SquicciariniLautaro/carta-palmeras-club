@@ -2,7 +2,7 @@ import { Link } from "react-router";
 import { NEGOCIO } from "../../config";
 import { linkWhatsApp, mensajeConsulta } from "../../lib/whatsapp";
 import Logo from "../ui/Logo";
-import { IconoInstagram, IconoWhatsApp } from "../ui/Iconos";
+import { IconoCandado, IconoInstagram, IconoWhatsApp } from "../ui/Iconos";
 
 const LAMBDA_INSTAGRAM = "https://www.instagram.com/lambdasoluciones";
 
@@ -90,8 +90,13 @@ export default function Footer() {
           <p>
             © {anio} {NEGOCIO.nombre}. Todos los derechos reservados.
           </p>
-          <Link to="/admin" className="underline-offset-2 hover:text-crema hover:underline">
-            Acceso administrador
+          <Link
+            to="/admin"
+            aria-label="Acceso administrador"
+            title="Acceso administrador"
+            className="rounded p-1 text-crema-suave/30 transition-colors hover:text-crema-suave focus-visible:text-crema-suave"
+          >
+            <IconoCandado className="size-3.5" />
           </Link>
         </div>
       </div>

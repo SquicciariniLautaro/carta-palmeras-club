@@ -92,6 +92,12 @@ export const IconoActualizar = (p) => (
     <path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" />
   </Svg>
 );
+export const IconoCandado = (p) => (
+  <Svg {...p}>
+    <rect x="5" y="11" width="14" height="9" rx="2" />
+    <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+  </Svg>
+);
 export const IconoInstagram = (p) => (
   <Svg {...p}>
     <rect x="3" y="3" width="18" height="18" rx="5" />
