@@ -49,7 +49,7 @@ export default function Catalogo() {
   );
 }
 
-const DURACION_INTRO_MS = 2800;
+const DURACION_INTRO_MS = 2100;
 
 function CatalogoContenido() {
   const carrito = useCarrito();
