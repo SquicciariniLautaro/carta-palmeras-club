@@ -110,6 +110,16 @@ Después de hacer cambios en el `.env`, cortá el servidor (Ctrl + C) y volvé a
 
 Si más adelante cambiás una variable, hay que hacer **Redeploy** en Vercel para que se aplique.
 
+## Publicar en GitHub Pages (para que el cliente lo pruebe)
+
+El repositorio ya trae un workflow (`.github/workflows/pages.yml`) que compila la app y la publica solo cada vez que subís código a `main` o a `app-completa-supabase`.
+
+1. En GitHub: **Settings → Pages → Build and deployment → Source**, elegí **GitHub Actions** (no "Deploy from a branch": esa opción muestra el código sin compilar y la página queda en blanco).
+2. Entrá a la pestaña **Actions** y esperá a que "Publicar en GitHub Pages" termine con el tilde verde (1 o 2 minutos). Si no arrancó, tocá **Run workflow**.
+3. La dirección es `https://TU-USUARIO.github.io/carta-palmeras-club/`. El panel está en `/admin` y también se llega con el candado del final de la página.
+
+Los datos de Supabase y WhatsApp ya van dentro del workflow (son valores públicos). Si algún día cambian, se pueden pisar en **Settings → Secrets and variables → Actions → Variables** con los nombres `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_WHATSAPP_NUMBER` y `VITE_INSTAGRAM_URL`.
+
 ## Opciones de las comidas (simple, doble, sin cebolla, extras)
 
 Cada comida puede tener opciones para que el cliente arme su pedido. Se cargan desde el panel: **Comidas → Editar → Opciones para el cliente**.

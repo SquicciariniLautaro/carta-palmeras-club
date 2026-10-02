@@ -61,7 +61,7 @@ export default function Panel({ sesion }) {
           </div>
           <div className="flex items-center gap-2">
             <span className="hidden max-w-48 truncate text-xs text-tinta-suave md:inline">{sesion.user.email}</span>
-            <a href="/" target="_blank" rel="noopener noreferrer" className="boton-secundario px-3 py-2 text-xs">
+            <a href={import.meta.env.BASE_URL} target="_blank" rel="noopener noreferrer" className="boton-secundario px-3 py-2 text-xs">
               Ver catálogo
             </a>
             <button type="button" className="boton-secundario px-3 py-2 text-xs" onClick={cerrarSesion}>

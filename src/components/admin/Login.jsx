@@ -70,7 +70,7 @@ export default function Login() {
         <button type="submit" className="boton-primario w-full" disabled={enviando || !email || !password}>
           {enviando ? "Ingresando…" : "Ingresar"}
         </button>
-        <a href="/" className="block text-center text-xs text-tinta-suave hover:text-tinta">
+        <a href={import.meta.env.BASE_URL} className="block text-center text-xs text-tinta-suave hover:text-tinta">
           ← Volver al catálogo
         </a>
       </form>

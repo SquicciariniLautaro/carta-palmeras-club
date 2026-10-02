@@ -1,9 +1,11 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  // En GitHub Pages el sitio vive en /nombre-del-repo/ (lo define el workflow); en Vercel y local es "/"
+  base: loadEnv(mode, ".", "VITE_").VITE_BASE || "/",
   plugins: [react(), tailwindcss()],
   build: {
     rolldownOptions: {
@@ -20,4 +22,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));

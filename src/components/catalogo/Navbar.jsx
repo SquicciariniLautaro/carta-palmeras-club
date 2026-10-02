@@ -8,7 +8,7 @@ export default function Navbar({ cantidad, onAbrirCarrito }) {
   return (
     <header className="sticky top-0 z-30 h-[72px] bg-fondo">
       <div className="mx-auto flex h-full max-w-6xl items-center justify-between gap-3 px-4">
-        <a href="/" aria-label="Las Palmeras Club, inicio">
+        <a href={import.meta.env.BASE_URL} aria-label="Las Palmeras Club, inicio">
           <Logo className="h-12 w-auto" />
         </a>
         <div className="flex items-center gap-2">
