@@ -1,0 +1,174 @@
+:root {
+  --crema: #fbf3e4;
+  --crema-oscuro: #f0e1c4;
+  --tinta: #2a211b;
+  --tinta-suave: #6b5d52;
+  --rojo: #d62828;
+  --rojo-oscuro: #b01f1f;
+  --amarillo: #f5b82e;
+  --negro: #161616;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: "Poppins", sans-serif;
+  background: var(--crema);
+  color: var(--tinta);
+  line-height: 1.5;
+}
+
+button, input, select, textarea { font: inherit; }
+button { cursor: pointer; border: none; }
+:focus-visible { outline: 3px solid var(--amarillo); outline-offset: 2px; }
+
+/* ---------- Header ---------- */
+.header {
+  position: relative;
+  background: var(--negro);
+  text-align: center;
+  padding: 20px 16px 44px;
+  margin-bottom: 8px;
+}
+.header__logo { width: 150px; height: 150px; object-fit: contain; }
+.header__texto { color: var(--amarillo); font-weight: 500; max-width: 320px; margin: 0 auto; }
+/* Borde amarillo "derretido", guiño al queso del menú impreso */
+.header::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: -20px;
+  height: 24px;
+  background: radial-gradient(circle at 20px 0, var(--amarillo) 15px, transparent 16px) repeat-x;
+  background-size: 40px 24px;
+}
+
+/* ---------- Tabs ---------- */
+.tabs {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; gap: 8px;
+  overflow-x: auto;
+  padding: 28px 16px 10px;
+  background: var(--crema);
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tabs__link {
+  flex: none;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--crema-oscuro);
+  color: var(--tinta);
+  font-weight: 500;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+.tabs__link:hover { background: var(--amarillo); }
+
+/* ---------- Secciones y tarjetas ---------- */
+.menu { max-width: 1000px; margin: 0 auto; padding: 0 16px 120px; }
+.seccion { padding-top: 24px; scroll-margin-top: 70px; }
+.seccion__titulo { font-size: 1.6rem; font-weight: 700; margin-bottom: 12px; }
+.grilla { display: grid; gap: 12px; grid-template-columns: 1fr; }
+
+.card {
+  display: flex;
+  background: #fff;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--crema-oscuro);
+}
+.card__img {
+  flex: none; width: 110px;
+  background: var(--crema-oscuro);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 2rem;
+}
+.card__img img { width: 100%; height: 100%; object-fit: cover; }
+.card__body { flex: 1; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.card__titulo { font-size: 1rem; font-weight: 600; }
+.card__desc { font-size: 0.8rem; color: var(--tinta-suave); }
+.card__pie { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.card__precio { font-size: 1.05rem; }
+
+.chips { display: flex; gap: 6px; }
+.chip {
+  padding: 4px 12px; border-radius: 999px;
+  background: transparent; color: var(--tinta);
+  border: 1.5px solid var(--crema-oscuro);
+  font-size: 0.8rem; font-weight: 500;
+}
+.chip--activo { background: var(--negro); color: #fff; border-color: var(--negro); }
+
+.btn-agregar {
+  background: var(--rojo); color: #fff;
+  padding: 8px 18px; border-radius: 999px;
+  font-weight: 600; font-size: 0.85rem;
+}
+.btn-agregar:hover { background: var(--rojo-oscuro); }
+.btn-agregar:active { transform: scale(0.96); }
+
+/* ---------- Barra inferior ---------- */
+.barra-carrito {
+  position: fixed; left: 16px; right: 16px; bottom: 16px; z-index: 20;
+  max-width: 600px; margin: 0 auto;
+  display: flex; justify-content: space-between;
+  background: var(--negro); color: #fff;
+  padding: 14px 20px; border-radius: 14px;
+  font-size: 1rem;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+.barra-carrito strong { color: var(--amarillo); }
+
+/* ---------- Carrito (panel lateral) ---------- */
+.overlay {
+  position: fixed; inset: 0; z-index: 30;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex; justify-content: flex-end;
+}
+.cart {
+  width: 100%; max-width: 420px; height: 100%;
+  background: var(--crema);
+  padding: 20px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.cart__cabecera { display: flex; justify-content: space-between; align-items: center; }
+.cart__cerrar { background: none; font-size: 1.3rem; color: var(--tinta); }
+.cart__vacio { color: var(--tinta-suave); }
+.cart__lista { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.cart__item {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  background: #fff; padding: 10px 12px; border-radius: 12px;
+}
+.cart__opcion { color: var(--tinta-suave); font-size: 0.85rem; }
+.cart__subtotal { font-size: 0.85rem; color: var(--tinta-suave); }
+
+.cantidad { display: flex; align-items: center; gap: 10px; }
+.cantidad button {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--crema-oscuro); font-size: 1.1rem;
+}
+
+.form { display: flex; flex-direction: column; gap: 10px; }
+.form label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; font-weight: 500; }
+.form input, .form select, .form textarea {
+  padding: 10px 12px; border-radius: 10px;
+  border: 1.5px solid var(--crema-oscuro); background: #fff;
+}
+
+.cart__total { display: flex; justify-content: space-between; font-size: 1.2rem; }
+.btn-enviar {
+  background: #1f9d4d; color: #fff;
+  padding: 14px; border-radius: 12px; font-weight: 600; font-size: 1rem;
+}
+.btn-enviar:disabled { background: #b9b2a6; cursor: not-allowed; }
+.btn-vaciar { background: none; color: var(--rojo); font-size: 0.85rem; text-decoration: underline; }
+
+/* ---------- Pantallas grandes ---------- */
+@media (min-width: 700px) {
+  .grilla { grid-template-columns: 1fr 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
