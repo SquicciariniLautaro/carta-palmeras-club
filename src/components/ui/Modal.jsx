@@ -21,16 +21,16 @@ export default function Modal({ abierto, onCerrar, titulo, children, ancho = "ma
         if (e.target === ref.current) onCerrar();
       }}
       aria-label={titulo}
-      className={`m-auto w-[calc(100%-1.5rem)] ${ancho} rounded-2xl border border-noche-3 bg-noche-2 p-0 text-crema shadow-2xl`}
+      className={`m-auto w-[calc(100%-1.5rem)] ${ancho} rounded-2xl border border-borde bg-papel p-0 text-tinta shadow-2xl`}
     >
       {abierto && (
         <div className="max-h-[85dvh] overflow-y-auto">
-          <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-noche-3 bg-noche-2 px-4 py-3">
+          <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-borde bg-papel px-4 py-3">
             <h2 className="text-lg font-semibold">{titulo}</h2>
             <button
               type="button"
               onClick={onCerrar}
-              className="rounded-full p-1.5 text-crema-suave hover:bg-noche-3 hover:text-crema"
+              className="rounded-full p-1.5 text-tinta-suave hover:bg-borde hover:text-tinta"
               aria-label="Cerrar"
             >
               <IconoCerrar />

@@ -13,7 +13,7 @@ export default function Confirmar({
 }) {
   return (
     <Modal abierto={abierto} onCerrar={onCancelar} titulo={titulo} ancho="max-w-sm">
-      <p className="text-sm text-crema-suave">{mensaje}</p>
+      <p className="text-sm text-tinta-suave">{mensaje}</p>
       <div className="mt-5 flex justify-end gap-2">
         <button type="button" className="boton-secundario" onClick={onCancelar} disabled={procesando}>
           Volver

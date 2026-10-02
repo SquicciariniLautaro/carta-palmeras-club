@@ -14,7 +14,6 @@ import Carrito from "../components/catalogo/Carrito";
 import BotonFlotante from "../components/catalogo/BotonFlotante";
 import Footer from "../components/catalogo/Footer";
 import Preloader from "../components/catalogo/Preloader";
-import QuesoDerretido from "../components/ui/QuesoDerretido";
 
 // Trae categorías y comidas activas
 async function obtenerCatalogo() {
@@ -238,18 +237,16 @@ function CatalogoContenido() {
     <div className="flex min-h-dvh flex-col">
       <Navbar cantidad={unidades} onAbrirCarrito={() => setCarritoAbierto(true)} />
 
-      <QuesoDerretido />
-
       <main className="mx-auto w-full max-w-6xl flex-1 px-4">
         <section className="pb-2 pt-4 text-center">
-          <h1 className="font-script text-5xl leading-tight text-queso sm:text-6xl">Nuestro menú</h1>
-          <p className="text-sm text-crema-suave">Armá tu pedido y mandalo por WhatsApp.</p>
+          <h1 className="font-script text-5xl leading-tight text-palmera sm:text-6xl">Nuestro menú</h1>
+          <p className="text-sm text-tinta-suave">Armá tu pedido y mandalo por WhatsApp.</p>
         </section>
 
         {estado === "error" ? (
           <div className="tarjeta mx-auto my-10 max-w-md p-6 text-center">
             <p className="text-lg font-semibold">Uy, no pudimos cargar el menú 😕</p>
-            <p className="mt-1 text-sm text-crema-suave">
+            <p className="mt-1 text-sm text-tinta-suave">
               Revisá tu conexión e intentá de nuevo. Si sigue fallando, escribinos por WhatsApp.
             </p>
             <div className="mt-4 flex flex-wrap justify-center gap-2">
@@ -279,15 +276,15 @@ function CatalogoContenido() {
                 ))}
               </div>
             ) : visibles.length === 0 ? (
-              <div className="py-16 text-center text-crema-suave">
+              <div className="py-16 text-center text-tinta-suave">
                 <p className="text-4xl">🥥</p>
-                <p className="mt-2 font-medium text-crema">
+                <p className="mt-2 font-medium text-tinta">
                   {comidas.length === 0 ? "Todavía no hay comidas cargadas." : "No encontramos nada con ese filtro."}
                 </p>
                 {(busqueda || filtro !== "todos") && (
                   <button
                     type="button"
-                    className="mt-3 text-sm text-queso underline"
+                    className="mt-3 text-sm text-palmera underline"
                     onClick={() => {
                       setBusqueda("");
                       setFiltro("todos");

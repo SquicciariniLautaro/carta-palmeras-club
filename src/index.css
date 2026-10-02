@@ -1,24 +1,24 @@
 @import "tailwindcss";
 
-/* Colores de marca tomados del menú impreso: fondo negro, queso amarillo
-   derretido y títulos naranjas. Para cambiarlos, editá solo estos valores. */
+/* Paleta pedida por el cliente: fondo beige (sin blanco puro) y rojo anaranjado,
+   el "color de las palmeras". Para cambiarla, editá solo estos valores. */
 @theme {
   --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
   --font-script: "Yellowtail", "Brush Script MT", cursive;
 
-  --color-noche: #141414;        /* fondo */
-  --color-noche-2: #1e1e1e;      /* tarjetas y paneles */
-  --color-noche-3: #2e2e2e;      /* bordes, hover */
-  --color-queso: #f5b82e;        /* primario: el amarillo del queso */
-  --color-queso-oscuro: #dc9d14;
-  --color-naranja: #ff8c42;      /* secundario: promos y acentos */
-  --color-naranja-oscuro: #e5702a;
-  --color-rojo: #e04848;         /* acciones destructivas */
-  --color-crema: #f7f1e5;        /* texto principal */
-  --color-crema-suave: #b5ab9b;  /* texto secundario */
+  --color-fondo: #f6ecd8;         /* fondo beige */
+  --color-papel: #fcf6ea;         /* tarjetas y paneles */
+  --color-borde: #e4d4b6;         /* bordes, hover */
+  --color-palmera: #e2472b;       /* primario: rojo anaranjado de las palmeras */
+  --color-palmera-oscuro: #c63a20;
+  --color-brasa: #c2371c;         /* acentos y títulos (más oscuro, para texto) */
+  --color-brasa-oscuro: #a52e17;
+  --color-rojo: #a8231f;          /* acciones destructivas */
+  --color-tinta: #2b211b;         /* texto principal */
+  --color-tinta-suave: #6b5b4e;   /* texto secundario */
   --color-whatsapp: #25d366;
   --color-whatsapp-oscuro: #1ebe5b;
-  --color-lambda: #ffd60a;       /* firma de Lambda Soluciones */
+  --color-lambda: #ffd60a;        /* firma de Lambda Soluciones */
 
   --animate-balanceo: balanceo 1.6s ease-in-out infinite;
 
@@ -30,11 +30,11 @@
 
 @layer base {
   html {
-    color-scheme: dark;
+    color-scheme: light;
     -webkit-tap-highlight-color: transparent;
   }
   body {
-    @apply bg-noche text-crema antialiased;
+    @apply bg-fondo text-tinta antialiased;
     min-width: 320px;
   }
   button:not(:disabled),
@@ -42,21 +42,21 @@
     cursor: pointer;
   }
   :focus-visible {
-    outline: 3px solid var(--color-naranja);
+    outline: 3px solid var(--color-palmera);
     outline-offset: 2px;
   }
   dialog::backdrop {
-    background: rgb(0 0 0 / 0.65);
+    background: rgb(43 33 27 / 0.55);
   }
 }
 
 /* Clases reutilizables */
 @utility campo {
-  @apply w-full rounded-xl border border-noche-3 bg-noche px-3 py-2.5 text-sm text-crema placeholder:text-crema-suave/60 focus:border-queso focus:outline-none;
+  @apply w-full rounded-xl border border-borde bg-papel px-3 py-2.5 text-sm text-tinta placeholder:text-tinta-suave/60 focus:border-palmera focus:outline-none;
 }
 
 @utility etiqueta {
-  @apply mb-1 block text-xs font-medium text-crema-suave;
+  @apply mb-1 block text-xs font-medium text-tinta-suave;
 }
 
 @utility boton {
@@ -64,11 +64,11 @@
 }
 
 @utility boton-primario {
-  @apply boton bg-queso text-noche hover:bg-queso-oscuro;
+  @apply boton bg-palmera text-white hover:bg-palmera-oscuro;
 }
 
 @utility boton-secundario {
-  @apply boton border border-noche-3 bg-noche-2 text-crema hover:bg-noche-3;
+  @apply boton border border-borde bg-papel text-tinta hover:bg-borde;
 }
 
 @utility boton-peligro {
@@ -76,11 +76,11 @@
 }
 
 @utility boton-whatsapp {
-  @apply boton bg-whatsapp text-noche hover:bg-whatsapp-oscuro;
+  @apply boton bg-whatsapp text-tinta hover:bg-whatsapp-oscuro;
 }
 
 @utility tarjeta {
-  @apply rounded-2xl border border-noche-3 bg-noche-2;
+  @apply rounded-2xl border border-borde bg-papel;
 }
 
 @utility sin-scrollbar {

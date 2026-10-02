@@ -58,18 +58,18 @@ export default function Carrito({
         aria-modal="true"
         aria-label="Mi pedido"
         inert={!abierto}
-        className={`absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-noche-2 shadow-2xl transition-transform duration-300 focus:outline-none ${
+        className={`absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-papel shadow-2xl transition-transform duration-300 focus:outline-none ${
           abierto ? "translate-x-0" : "translate-x-full"
         }`}
       >
-        <div className="flex items-center justify-between border-b border-noche-3 px-4 py-3">
+        <div className="flex items-center justify-between border-b border-borde px-4 py-3">
           <h2 className="flex items-center gap-2 text-lg font-semibold">
-            <IconoBolsa className="size-5 text-queso" /> Mi pedido
+            <IconoBolsa className="size-5 text-palmera" /> Mi pedido
           </h2>
           <button
             type="button"
             onClick={onCerrar}
-            className="rounded-full p-1.5 text-crema-suave hover:bg-noche-3 hover:text-crema"
+            className="rounded-full p-1.5 text-tinta-suave hover:bg-borde hover:text-tinta"
             aria-label="Cerrar pedido"
           >
             <IconoCerrar />
@@ -77,9 +77,9 @@ export default function Carrito({
         </div>
 
         {lineas.length === 0 ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-crema-suave">
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-tinta-suave">
             <IconoBolsa className="size-12 opacity-40" />
-            <p className="font-medium text-crema">Tu pedido está vacío</p>
+            <p className="font-medium text-tinta">Tu pedido está vacío</p>
             <p className="text-sm">Agregá algo rico del menú para empezar.</p>
           </div>
         ) : (
@@ -87,13 +87,13 @@ export default function Carrito({
             <div className="flex-1 space-y-3 overflow-y-auto p-4">
               <ul className="space-y-3">
                 {lineas.map(({ comida, cantidad }) => (
-                  <li key={comida.id} className="rounded-xl border border-noche-3 bg-noche/50 p-3">
+                  <li key={comida.id} className="rounded-xl border border-borde bg-fondo/50 p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold">{comida.nombre}</p>
-                        <p className="text-xs text-crema-suave">
+                        <p className="text-xs text-tinta-suave">
                           {formatearPrecio(precioFinal(comida))} c/u ·{" "}
-                          <span className="font-semibold text-crema">
+                          <span className="font-semibold text-tinta">
                             {formatearPrecio(precioFinal(comida) * cantidad)}
                           </span>
                         </p>
@@ -101,7 +101,7 @@ export default function Carrito({
                       <button
                         type="button"
                         onClick={() => onEliminar(comida)}
-                        className="rounded-lg p-1.5 text-crema-suave hover:bg-noche-3 hover:text-naranja"
+                        className="rounded-lg p-1.5 text-tinta-suave hover:bg-borde hover:text-brasa"
                         aria-label={`Eliminar ${comida.nombre} del pedido`}
                       >
                         <IconoBasura className="size-4" />
@@ -120,11 +120,11 @@ export default function Carrito({
                 ))}
               </ul>
 
-              <button type="button" onClick={onVaciar} className="text-xs text-crema-suave underline hover:text-naranja">
+              <button type="button" onClick={onVaciar} className="text-xs text-tinta-suave underline hover:text-brasa">
                 Vaciar pedido
               </button>
 
-              <div className="space-y-3 border-t border-noche-3 pt-3">
+              <div className="space-y-3 border-t border-borde pt-3">
                 <div>
                   <label htmlFor="cliente" className="etiqueta">
                     Tu nombre (opcional)
@@ -156,7 +156,7 @@ export default function Carrito({
               </div>
             </div>
 
-            <div className="space-y-3 border-t border-noche-3 p-4">
+            <div className="space-y-3 border-t border-borde p-4">
               <div className="flex items-center justify-between text-lg font-bold">
                 <span>Total</span>
                 <span>{formatearPrecio(total)}</span>

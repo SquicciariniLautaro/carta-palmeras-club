@@ -32,7 +32,7 @@ export default function Login() {
         <div className="text-center">
           <Logo className="mx-auto h-24 w-auto" />
           <h1 className="mt-4 text-xl font-semibold">Panel de administración</h1>
-          <p className="text-sm text-crema-suave">Ingresá con tu cuenta.</p>
+          <p className="text-sm text-tinta-suave">Ingresá con tu cuenta.</p>
         </div>
         <div>
           <label htmlFor="email" className="etiqueta">
@@ -63,14 +63,14 @@ export default function Login() {
           />
         </div>
         {error && (
-          <p className="rounded-lg bg-naranja/15 px-3 py-2 text-sm text-naranja" role="alert">
+          <p className="rounded-lg bg-brasa/15 px-3 py-2 text-sm text-brasa" role="alert">
             {error}
           </p>
         )}
         <button type="submit" className="boton-primario w-full" disabled={enviando || !email || !password}>
           {enviando ? "Ingresando…" : "Ingresar"}
         </button>
-        <a href="/" className="block text-center text-xs text-crema-suave hover:text-crema">
+        <a href="/" className="block text-center text-xs text-tinta-suave hover:text-tinta">
           ← Volver al catálogo
         </a>
       </form>

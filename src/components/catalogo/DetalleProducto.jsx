@@ -13,17 +13,17 @@ export default function DetalleProducto({ comida, categoria, cantidad, onCerrar,
       {comida && (
         <div className="space-y-4">
           <ImagenComida comida={comida} className="aspect-[4/3] w-full rounded-xl" />
-          {categoria && <p className="text-xs font-medium uppercase tracking-wider text-queso">{categoria}</p>}
-          <p className="whitespace-pre-line text-sm text-crema-suave">
+          {categoria && <p className="text-xs font-medium uppercase tracking-wider text-palmera">{categoria}</p>}
+          <p className="whitespace-pre-line text-sm text-tinta-suave">
             {comida.descripcion || "Sin descripción."}
           </p>
           <div className="flex items-center justify-between gap-3">
             <Precio comida={comida} grande />
             {agotado ? (
-              <span className="rounded-full bg-noche-3 px-3 py-1 text-xs font-bold uppercase">Agotado</span>
+              <span className="rounded-full bg-borde px-3 py-1 text-xs font-bold uppercase">Agotado</span>
             ) : (
               comida.stock <= STOCK_BAJO && (
-                <span className="text-xs font-semibold text-naranja">Quedan {comida.stock}</span>
+                <span className="text-xs font-semibold text-brasa">Quedan {comida.stock}</span>
               )
             )}
           </div>

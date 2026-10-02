@@ -8,23 +8,23 @@ export default function DetalleVenta({ venta, onCerrar, onConfirmar, onCancelar,
       {venta && (
         <div className="space-y-4 text-sm">
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
-            <dt className="text-crema-suave">Fecha</dt>
+            <dt className="text-tinta-suave">Fecha</dt>
             <dd>{formatearFechaHora(venta.created_at)}</dd>
-            <dt className="text-crema-suave">Cliente</dt>
+            <dt className="text-tinta-suave">Cliente</dt>
             <dd>{venta.cliente_nombre || "—"}</dd>
-            <dt className="text-crema-suave">Estado</dt>
+            <dt className="text-tinta-suave">Estado</dt>
             <dd>
               <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${ESTADOS[venta.estado]?.clase}`}>
                 {ESTADOS[venta.estado]?.nombre}
               </span>
             </dd>
-            <dt className="text-crema-suave">Origen</dt>
+            <dt className="text-tinta-suave">Origen</dt>
             <dd>{venta.origen === "manual" ? "Manual (en el local)" : "Web (WhatsApp)"}</dd>
           </dl>
 
           <table className="w-full text-left">
-            <thead className="text-xs text-crema-suave">
-              <tr className="border-b border-noche-3">
+            <thead className="text-xs text-tinta-suave">
+              <tr className="border-b border-borde">
                 <th className="py-2 font-medium">Producto</th>
                 <th className="py-2 text-right font-medium">Cant.</th>
                 <th className="py-2 text-right font-medium">Precio</th>
@@ -33,10 +33,10 @@ export default function DetalleVenta({ venta, onCerrar, onConfirmar, onCancelar,
             </thead>
             <tbody>
               {venta.venta_items.map((i) => (
-                <tr key={i.id} className="border-b border-noche-3/60">
+                <tr key={i.id} className="border-b border-borde/60">
                   <td className="py-2">
                     {i.nombre}
-                    {!i.comida_id && <span className="ml-1 text-xs text-crema-suave">(borrada)</span>}
+                    {!i.comida_id && <span className="ml-1 text-xs text-tinta-suave">(borrada)</span>}
                   </td>
                   <td className="py-2 text-right">{i.cantidad}</td>
                   <td className="py-2 text-right">{formatearPrecio(i.precio_unitario)}</td>
@@ -55,14 +55,14 @@ export default function DetalleVenta({ venta, onCerrar, onConfirmar, onCancelar,
           </table>
 
           {venta.nota && (
-            <div className="rounded-xl bg-noche p-3">
-              <p className="text-xs text-crema-suave">Nota</p>
+            <div className="rounded-xl bg-fondo p-3">
+              <p className="text-xs text-tinta-suave">Nota</p>
               <p className="whitespace-pre-line">{venta.nota}</p>
             </div>
           )}
 
           {venta.estado !== "cancelada" && (
-            <div className="flex flex-wrap justify-end gap-2 border-t border-noche-3 pt-4">
+            <div className="flex flex-wrap justify-end gap-2 border-t border-borde pt-4">
               <button type="button" className="boton-peligro" onClick={() => onCancelar(venta)} disabled={procesando}>
                 {venta.estado === "confirmada" ? "Cancelar y devolver stock" : "Cancelar pedido"}
               </button>

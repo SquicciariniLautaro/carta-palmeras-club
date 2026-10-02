@@ -54,24 +54,24 @@ export default function Footer() {
   const anio = new Date().getFullYear();
   return (
     <footer className="mt-16">
-      <div className="border-t border-noche-3 bg-noche-2/60 pb-10 pt-10">
+      <div className="border-t border-borde bg-papel/60 pb-10 pt-10">
         <div className="mx-auto grid max-w-6xl gap-8 px-4 text-center sm:grid-cols-3 sm:text-left">
           <div className="flex flex-col items-center gap-3 sm:items-start">
             <Logo className="h-24 w-auto" />
           </div>
 
           <div className="space-y-2">
-            <h2 className="font-script text-3xl text-queso">Pedidos</h2>
-            <p className="text-sm text-crema-suave">
+            <h2 className="font-script text-3xl text-palmera">Pedidos</h2>
+            <p className="text-sm text-tinta-suave">
               Armá tu pedido en esta página y te llega directo por WhatsApp. Te confirmamos la demora y la forma de pago.
             </p>
           </div>
 
           <div className="space-y-3">
-            <h2 className="font-script text-3xl text-queso">Seguinos</h2>
+            <h2 className="font-script text-3xl text-palmera">Seguinos</h2>
             <div className="flex flex-wrap justify-center gap-2 sm:justify-start">
               <a href={NEGOCIO.instagram} target="_blank" rel="noopener noreferrer" className="boton-secundario">
-                <IconoInstagram className="size-4 text-queso" /> Seguinos en Instagram
+                <IconoInstagram className="size-4 text-palmera" /> Seguinos en Instagram
               </a>
               {NEGOCIO.whatsapp && (
                 <a
@@ -86,7 +86,7 @@ export default function Footer() {
             </div>
           </div>
         </div>
-        <div className="mx-auto mt-8 flex max-w-6xl flex-col items-center gap-2 px-4 text-xs text-crema-suave sm:flex-row sm:justify-between">
+        <div className="mx-auto mt-8 flex max-w-6xl flex-col items-center gap-2 px-4 text-xs text-tinta-suave sm:flex-row sm:justify-between">
           <p>
             © {anio} {NEGOCIO.nombre}. Todos los derechos reservados.
           </p>
@@ -94,7 +94,7 @@ export default function Footer() {
             to="/admin"
             aria-label="Acceso administrador"
             title="Acceso administrador"
-            className="rounded p-1 text-crema-suave/30 transition-colors hover:text-crema-suave focus-visible:text-crema-suave"
+            className="rounded p-1 text-tinta-suave/30 transition-colors hover:text-tinta-suave focus-visible:text-tinta-suave"
           >
             <IconoCandado className="size-3.5" />
           </Link>

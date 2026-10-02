@@ -51,16 +51,16 @@ export default function Panel({ sesion }) {
 
   return (
     <div className="min-h-dvh">
-      <header className="sticky top-0 z-30 border-b border-noche-3 bg-noche/90 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-borde bg-fondo/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-3">
             <Logo className="h-10 w-auto" />
-            <span className="hidden rounded-full bg-noche-3 px-2 py-0.5 text-xs text-crema-suave sm:inline">
+            <span className="hidden rounded-full bg-borde px-2 py-0.5 text-xs text-tinta-suave sm:inline">
               Admin
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="hidden max-w-48 truncate text-xs text-crema-suave md:inline">{sesion.user.email}</span>
+            <span className="hidden max-w-48 truncate text-xs text-tinta-suave md:inline">{sesion.user.email}</span>
             <a href="/" target="_blank" rel="noopener noreferrer" className="boton-secundario px-3 py-2 text-xs">
               Ver catálogo
             </a>
@@ -79,8 +79,8 @@ export default function Panel({ sesion }) {
               onClick={() => setSeccion(s.id)}
               className={`border-b-2 px-4 py-2.5 text-sm font-medium transition ${
                 seccion === s.id
-                  ? "border-queso text-crema"
-                  : "border-transparent text-crema-suave hover:text-crema"
+                  ? "border-palmera text-tinta"
+                  : "border-transparent text-tinta-suave hover:text-tinta"
               }`}
             >
               {s.nombre}

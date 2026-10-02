@@ -27,7 +27,7 @@ function FilaCategoria({ categoria, cantidad, esPrimera, esUltima, onRenombrar, 
       <div className="flex flex-col">
         <button
           type="button"
-          className="rounded p-1 text-crema-suave hover:bg-noche-3 hover:text-crema disabled:opacity-30"
+          className="rounded p-1 text-tinta-suave hover:bg-borde hover:text-tinta disabled:opacity-30"
           onClick={() => onMover(-1)}
           disabled={esPrimera}
           aria-label={`Subir ${categoria.nombre}`}
@@ -36,7 +36,7 @@ function FilaCategoria({ categoria, cantidad, esPrimera, esUltima, onRenombrar, 
         </button>
         <button
           type="button"
-          className="rounded p-1 text-crema-suave hover:bg-noche-3 hover:text-crema disabled:opacity-30"
+          className="rounded p-1 text-tinta-suave hover:bg-borde hover:text-tinta disabled:opacity-30"
           onClick={() => onMover(1)}
           disabled={esUltima}
           aria-label={`Bajar ${categoria.nombre}`}
@@ -53,12 +53,12 @@ function FilaCategoria({ categoria, cantidad, esPrimera, esUltima, onRenombrar, 
         onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
         aria-label={`Nombre de la categoría ${categoria.nombre}`}
       />
-      <span className="w-24 text-right text-xs text-crema-suave">
+      <span className="w-24 text-right text-xs text-tinta-suave">
         {cantidad} {cantidad === 1 ? "comida" : "comidas"}
       </span>
       <button
         type="button"
-        className="boton-secundario px-3 py-2 hover:text-naranja"
+        className="boton-secundario px-3 py-2 hover:text-brasa"
         onClick={onBorrar}
         disabled={cantidad > 0}
         title={cantidad > 0 ? "No se puede borrar: tiene comidas" : undefined}
@@ -136,7 +136,7 @@ export default function Categorias({ categorias, comidas, onCambio }) {
     <section className="mx-auto max-w-2xl space-y-4">
       <div>
         <h1 className="text-xl font-semibold">Categorías</h1>
-        <p className="text-sm text-crema-suave">
+        <p className="text-sm text-tinta-suave">
           El orden de esta lista es el orden de los filtros del catálogo. Solo se pueden borrar categorías sin comidas.
         </p>
       </div>
@@ -159,7 +159,7 @@ export default function Categorias({ categorias, comidas, onCambio }) {
       </form>
 
       {categorias.length === 0 ? (
-        <div className="tarjeta p-8 text-center text-crema-suave">Todavía no hay categorías.</div>
+        <div className="tarjeta p-8 text-center text-tinta-suave">Todavía no hay categorías.</div>
       ) : (
         <ul className="space-y-2">
           {categorias.map((c, i) => (

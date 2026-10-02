@@ -51,18 +51,18 @@ export default function SubirImagen({ urlActual, archivo, onArchivo, onQuitar, e
           elegir(e.dataTransfer.files?.[0]);
         }}
         className={`flex flex-col items-center gap-3 rounded-xl border-2 border-dashed p-4 text-center transition sm:flex-row sm:text-left ${
-          arrastrando ? "border-queso bg-queso/10" : "border-noche-3"
+          arrastrando ? "border-palmera bg-palmera/10" : "border-borde"
         }`}
       >
         {src ? (
           <img src={src} alt="Vista previa" className="size-24 shrink-0 rounded-lg object-cover" />
         ) : (
-          <div className="grid size-24 shrink-0 place-items-center rounded-lg bg-noche-3 text-crema-suave">
+          <div className="grid size-24 shrink-0 place-items-center rounded-lg bg-borde text-tinta-suave">
             <IconoImagen className="size-8" />
           </div>
         )}
         <div className="space-y-2">
-          <p className="text-xs text-crema-suave">
+          <p className="text-xs text-tinta-suave">
             Arrastrá una imagen o elegila. JPG, PNG o WebP. Se achica a 1200 px y se comprime antes de subir (máx. 2 MB).
           </p>
           <div className="flex flex-wrap justify-center gap-2 sm:justify-start">
@@ -70,7 +70,7 @@ export default function SubirImagen({ urlActual, archivo, onArchivo, onQuitar, e
               <IconoSubir className="size-4" /> {src ? "Cambiar imagen" : "Elegir imagen"}
             </button>
             {src && (
-              <button type="button" className="boton-secundario px-3 py-2 text-xs hover:text-naranja" onClick={quitar}>
+              <button type="button" className="boton-secundario px-3 py-2 text-xs hover:text-brasa" onClick={quitar}>
                 Quitar
               </button>
             )}
@@ -84,7 +84,7 @@ export default function SubirImagen({ urlActual, archivo, onArchivo, onQuitar, e
           onChange={(e) => elegir(e.target.files?.[0])}
         />
       </div>
-      {(errorLocal || error) && <p className="mt-1 text-xs text-naranja">{errorLocal || error}</p>}
+      {(errorLocal || error) && <p className="mt-1 text-xs text-brasa">{errorLocal || error}</p>}
     </div>
   );
 }

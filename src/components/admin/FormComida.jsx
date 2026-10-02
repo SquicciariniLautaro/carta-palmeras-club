@@ -20,7 +20,7 @@ function valoresIniciales(comida, categorias) {
 }
 
 function ErrorCampo({ mensaje }) {
-  return mensaje ? <p className="mt-1 text-xs text-naranja">{mensaje}</p> : null;
+  return mensaje ? <p className="mt-1 text-xs text-brasa">{mensaje}</p> : null;
 }
 
 // Mismas reglas que las restricciones de la base
@@ -214,11 +214,11 @@ export default function FormComida({ comida, categorias, onCerrar, onGuardado })
 
         <div className="flex flex-wrap gap-6">
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" className="size-4 accent-queso" checked={v.destacado} onChange={cambiar("destacado")} />
+            <input type="checkbox" className="size-4 accent-palmera" checked={v.destacado} onChange={cambiar("destacado")} />
             Destacado (aparece primero)
           </label>
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" className="size-4 accent-queso" checked={v.activo} onChange={cambiar("activo")} />
+            <input type="checkbox" className="size-4 accent-palmera" checked={v.activo} onChange={cambiar("activo")} />
             Activo (visible en el catálogo)
           </label>
         </div>
@@ -236,7 +236,7 @@ export default function FormComida({ comida, categorias, onCerrar, onGuardado })
           }}
         />
 
-        <div className="flex justify-end gap-2 border-t border-noche-3 pt-4">
+        <div className="flex justify-end gap-2 border-t border-borde pt-4">
           <button type="button" className="boton-secundario" onClick={onCerrar} disabled={guardando}>
             Cancelar
           </button>

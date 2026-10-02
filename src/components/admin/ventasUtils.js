@@ -1,9 +1,9 @@
 import { claveDia, fechaInput, formatearFechaHora } from "../../lib/formato";
 
 export const ESTADOS = {
-  pendiente: { nombre: "Pendiente", clase: "bg-naranja/15 text-naranja" },
-  confirmada: { nombre: "Confirmada", clase: "bg-queso/15 text-queso" },
-  cancelada: { nombre: "Cancelada", clase: "bg-noche-3 text-crema-suave" },
+  pendiente: { nombre: "Pendiente", clase: "bg-brasa/15 text-brasa" },
+  confirmada: { nombre: "Confirmada", clase: "bg-palmera/15 text-palmera" },
+  cancelada: { nombre: "Cancelada", clase: "bg-borde text-tinta-suave" },
 };
 
 export const RANGOS = [

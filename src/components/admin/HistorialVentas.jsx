@@ -37,9 +37,9 @@ async function obtenerVentas({ desde, hasta }) {
 function Resumen({ titulo, valor, detalle }) {
   return (
     <div className="tarjeta p-4">
-      <p className="text-xs text-crema-suave">{titulo}</p>
+      <p className="text-xs text-tinta-suave">{titulo}</p>
       <p className="mt-1 text-xl font-bold sm:text-2xl">{valor}</p>
-      {detalle && <p className="text-xs text-crema-suave">{detalle}</p>}
+      {detalle && <p className="text-xs text-tinta-suave">{detalle}</p>}
     </div>
   );
 }
@@ -165,7 +165,7 @@ export default function HistorialVentas({ comidas, onStockCambiado }) {
               aria-pressed={rango === r.id}
               onClick={() => setRango(r.id)}
               className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium ${
-                rango === r.id ? "bg-queso text-noche" : "bg-noche text-crema-suave hover:text-crema"
+                rango === r.id ? "bg-palmera text-fondo" : "bg-fondo text-tinta-suave hover:text-tinta"
               }`}
             >
               {r.nombre}
@@ -204,13 +204,13 @@ export default function HistorialVentas({ comidas, onStockCambiado }) {
       </div>
 
       {!periodo ? (
-        <p className="tarjeta p-6 text-center text-sm text-crema-suave">Elegí un rango de fechas válido.</p>
+        <p className="tarjeta p-6 text-center text-sm text-tinta-suave">Elegí un rango de fechas válido.</p>
       ) : cargando ? (
         <Cargando texto="Cargando ventas…" />
       ) : resultado.error ? (
         <div className="tarjeta p-6 text-center">
           <p className="font-semibold">No pudimos cargar las ventas.</p>
-          <p className="text-sm text-crema-suave">{mensajeDeError(resultado.error)}</p>
+          <p className="text-sm text-tinta-suave">{mensajeDeError(resultado.error)}</p>
           <button type="button" className="boton-primario mt-4" onClick={recargar}>
             Reintentar
           </button>
@@ -230,18 +230,18 @@ export default function HistorialVentas({ comidas, onStockCambiado }) {
           </div>
 
           {ventas.length >= LIMITE_VENTAS && (
-            <p className="text-xs text-naranja">
+            <p className="text-xs text-brasa">
               Se muestran las últimas {LIMITE_VENTAS} ventas del período. Elegí un rango más corto para ver todo.
             </p>
           )}
 
           {filtradas.length === 0 ? (
-            <div className="tarjeta p-8 text-center text-crema-suave">No hay ventas en este período con ese estado.</div>
+            <div className="tarjeta p-8 text-center text-tinta-suave">No hay ventas en este período con ese estado.</div>
           ) : (
             <div className="tarjeta overflow-x-auto">
               <table className="w-full min-w-[720px] text-left text-sm">
-                <thead className="text-xs text-crema-suave">
-                  <tr className="border-b border-noche-3">
+                <thead className="text-xs text-tinta-suave">
+                  <tr className="border-b border-borde">
                     <th className="px-3 py-2.5 font-medium">#</th>
                     <th className="px-3 py-2.5 font-medium">Fecha y hora</th>
                     <th className="px-3 py-2.5 font-medium">Cliente</th>
@@ -254,7 +254,7 @@ export default function HistorialVentas({ comidas, onStockCambiado }) {
                 </thead>
                 <tbody>
                   {filtradas.map((v) => (
-                    <tr key={v.id} className="border-b border-noche-3/60 last:border-0 hover:bg-noche-3/30">
+                    <tr key={v.id} className="border-b border-borde/60 last:border-0 hover:bg-borde/30">
                       <td className="px-3 py-2.5 font-semibold">
                         <button type="button" className="underline-offset-2 hover:underline" onClick={() => setDetalleId(v.id)}>
                           {v.numero}
@@ -269,7 +269,7 @@ export default function HistorialVentas({ comidas, onStockCambiado }) {
                           {ESTADOS[v.estado]?.nombre}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5 text-xs text-crema-suave">{v.origen === "manual" ? "Manual" : "Web"}</td>
+                      <td className="px-3 py-2.5 text-xs text-tinta-suave">{v.origen === "manual" ? "Manual" : "Web"}</td>
                       <td className="px-3 py-2.5">
                         <div className="flex justify-end gap-1">
                           <button type="button" className="boton-secundario px-2.5 py-1.5 text-xs" onClick={() => setDetalleId(v.id)}>
@@ -288,7 +288,7 @@ export default function HistorialVentas({ comidas, onStockCambiado }) {
                           {v.estado !== "cancelada" && (
                             <button
                               type="button"
-                              className="boton-secundario px-2.5 py-1.5 text-xs hover:text-naranja"
+                              className="boton-secundario px-2.5 py-1.5 text-xs hover:text-brasa"
                               onClick={() => setACancelar(v)}
                               disabled={procesando}
                             >

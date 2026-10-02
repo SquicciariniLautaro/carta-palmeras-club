@@ -9,10 +9,10 @@ export default function Filtros({ categorias, filtro, onFiltro, busqueda, onBusq
   ];
 
   return (
-    <div className="sticky top-[72px] z-20 -mx-4 bg-noche px-4 pb-3 pt-3">
+    <div className="sticky top-[72px] z-20 -mx-4 bg-fondo px-4 pb-3 pt-3">
       <label className="relative block">
         <span className="sr-only">Buscar comidas</span>
-        <IconoBuscar className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-crema-suave" />
+        <IconoBuscar className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-tinta-suave" />
         <input
           type="search"
           value={busqueda}
@@ -24,7 +24,7 @@ export default function Filtros({ categorias, filtro, onFiltro, busqueda, onBusq
           <button
             type="button"
             onClick={() => onBusqueda("")}
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-crema-suave hover:text-crema"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-tinta-suave hover:text-tinta"
             aria-label="Borrar búsqueda"
           >
             <IconoCerrar className="size-4" />
@@ -44,8 +44,8 @@ export default function Filtros({ categorias, filtro, onFiltro, busqueda, onBusq
               onClick={() => onFiltro(op.id)}
               className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition ${
                 activa
-                  ? "bg-queso text-noche"
-                  : "border border-noche-3 bg-noche-2 text-crema-suave hover:text-crema"
+                  ? "bg-palmera text-fondo"
+                  : "border border-borde bg-papel text-tinta-suave hover:text-tinta"
               }`}
             >
               {op.nombre}

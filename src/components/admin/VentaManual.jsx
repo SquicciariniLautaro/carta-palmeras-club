@@ -99,9 +99,9 @@ export default function VentaManual({ abierto, comidas, onCerrar, onRegistrada }
         </form>
 
         {lineas.length === 0 ? (
-          <p className="rounded-xl bg-noche p-4 text-center text-sm text-crema-suave">Agregá las comidas vendidas.</p>
+          <p className="rounded-xl bg-fondo p-4 text-center text-sm text-tinta-suave">Agregá las comidas vendidas.</p>
         ) : (
-          <ul className="divide-y divide-noche-3 rounded-xl bg-noche px-3">
+          <ul className="divide-y divide-borde rounded-xl bg-fondo px-3">
             {lineas.map((l) => {
               const c = porId.get(l.id);
               if (!c) return null;
@@ -114,7 +114,7 @@ export default function VentaManual({ abierto, comidas, onCerrar, onRegistrada }
                     {formatearPrecio(precioFinal(c) * l.cantidad)}
                     <button
                       type="button"
-                      className="rounded p-1 text-crema-suave hover:text-naranja"
+                      className="rounded p-1 text-tinta-suave hover:text-brasa"
                       onClick={() => setLineas((prev) => prev.filter((x) => x.id !== l.id))}
                       aria-label={`Quitar ${c.nombre}`}
                     >
@@ -142,13 +142,13 @@ export default function VentaManual({ abierto, comidas, onCerrar, onRegistrada }
           </div>
         </div>
 
-        <div className="flex items-center justify-between border-t border-noche-3 pt-4">
+        <div className="flex items-center justify-between border-t border-borde pt-4">
           <span className="text-lg font-bold">Total: {formatearPrecio(total)}</span>
           <button type="button" className="boton-primario" disabled={guardando || lineas.length === 0} onClick={registrar}>
             {guardando ? "Registrando…" : "Registrar venta"}
           </button>
         </div>
-        <p className="text-xs text-crema-suave">
+        <p className="text-xs text-tinta-suave">
           Los precios finales los calcula la base de datos con los valores actuales. La venta queda confirmada y descuenta stock.
         </p>
       </div>

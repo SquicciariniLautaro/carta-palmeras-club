@@ -7,7 +7,7 @@ import Precio from "./Precio";
 export function ImagenComida({ comida, className = "" }) {
   if (!comida.imagen_url) {
     return (
-      <div className={`grid place-items-center bg-noche-3 text-xs text-crema-suave ${className}`}>Sin imagen</div>
+      <div className={`grid place-items-center bg-borde text-xs text-tinta-suave ${className}`}>Sin imagen</div>
     );
   }
   return (
@@ -36,21 +36,21 @@ export default function TarjetaProducto({ comida, cantidad, onAgregar, onSumar, 
         <ImagenComida comida={comida} className="aspect-square w-full" />
         <div className="absolute left-2 top-2 flex flex-col items-start gap-1">
           {tienePromo(comida) && (
-            <span className="rounded-full bg-naranja px-2 py-0.5 text-[11px] font-bold text-noche">¡Promo!</span>
+            <span className="rounded-full bg-brasa px-2 py-0.5 text-[11px] font-bold text-fondo">¡Promo!</span>
           )}
           {comida.destacado && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-noche/85 px-2 py-0.5 text-[11px] font-semibold text-queso">
+            <span className="inline-flex items-center gap-1 rounded-full bg-fondo/85 px-2 py-0.5 text-[11px] font-semibold text-palmera">
               <IconoEstrella className="size-3" /> Destacado
             </span>
           )}
         </div>
         {agotado && (
-          <span className="absolute inset-x-0 bottom-0 bg-noche/85 py-1 text-center text-xs font-bold uppercase tracking-wider">
+          <span className="absolute inset-x-0 bottom-0 bg-fondo/85 py-1 text-center text-xs font-bold uppercase tracking-wider">
             Agotado
           </span>
         )}
         {pocas && (
-          <span className="absolute bottom-2 right-2 rounded-full bg-noche/85 px-2 py-0.5 text-[11px] font-semibold text-naranja">
+          <span className="absolute bottom-2 right-2 rounded-full bg-fondo/85 px-2 py-0.5 text-[11px] font-semibold text-brasa">
             Quedan {comida.stock}
           </span>
         )}
@@ -80,11 +80,11 @@ export default function TarjetaProducto({ comida, cantidad, onAgregar, onSumar, 
 export function TarjetaEsqueleto() {
   return (
     <div className="tarjeta animate-pulse overflow-hidden" aria-hidden="true">
-      <div className="aspect-square bg-noche-3" />
+      <div className="aspect-square bg-borde" />
       <div className="space-y-2 p-3">
-        <div className="h-3 w-3/4 rounded bg-noche-3" />
-        <div className="h-3 w-1/3 rounded bg-noche-3" />
-        <div className="h-9 rounded-xl bg-noche-3" />
+        <div className="h-3 w-3/4 rounded bg-borde" />
+        <div className="h-3 w-1/3 rounded bg-borde" />
+        <div className="h-9 rounded-xl bg-borde" />
       </div>
     </div>
   );

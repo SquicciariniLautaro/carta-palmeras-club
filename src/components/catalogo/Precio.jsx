@@ -4,10 +4,10 @@ export default function Precio({ comida, grande = false }) {
   if (tienePromo(comida)) {
     return (
       <div className="flex flex-wrap items-baseline gap-x-2">
-        <span className={`font-bold text-naranja ${grande ? "text-2xl" : "text-base"}`}>
+        <span className={`font-bold text-brasa ${grande ? "text-2xl" : "text-base"}`}>
           {formatearPrecio(comida.precio_promo)}
         </span>
-        <span className="text-xs text-crema-suave line-through">
+        <span className="text-xs text-tinta-suave line-through">
           <span className="sr-only">Antes </span>
           {formatearPrecio(comida.precio)}
         </span>

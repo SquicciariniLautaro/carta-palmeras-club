@@ -33,7 +33,7 @@ function EditorStock({ comida, onGuardar }) {
     <div className="flex items-center gap-1">
       <button
         type="button"
-        className="grid size-8 place-items-center rounded-lg bg-noche-3 hover:bg-naranja hover:text-noche disabled:opacity-40"
+        className="grid size-8 place-items-center rounded-lg bg-borde hover:bg-brasa hover:text-fondo disabled:opacity-40"
         onClick={() => confirmar(comida.stock - 1)}
         disabled={comida.stock <= 0}
         aria-label={`Restar stock de ${comida.nombre}`}
@@ -54,7 +54,7 @@ function EditorStock({ comida, onGuardar }) {
       />
       <button
         type="button"
-        className="grid size-8 place-items-center rounded-lg bg-queso text-noche hover:bg-queso-oscuro"
+        className="grid size-8 place-items-center rounded-lg bg-palmera text-fondo hover:bg-palmera-oscuro"
         onClick={() => confirmar(comida.stock + 1)}
         aria-label={`Sumar stock de ${comida.nombre}`}
       >
@@ -72,10 +72,10 @@ function Interruptor({ activo, onCambiar, etiqueta }) {
       aria-checked={activo}
       aria-label={etiqueta}
       onClick={onCambiar}
-      className={`relative h-6 w-11 shrink-0 rounded-full transition ${activo ? "bg-queso" : "bg-noche-3"}`}
+      className={`relative h-6 w-11 shrink-0 rounded-full transition ${activo ? "bg-palmera" : "bg-borde"}`}
     >
       <span
-        className={`absolute top-0.5 size-5 rounded-full bg-crema transition-all ${activo ? "left-5.5" : "left-0.5"}`}
+        className={`absolute top-0.5 size-5 rounded-full bg-tinta transition-all ${activo ? "left-5.5" : "left-0.5"}`}
       />
     </button>
   );
@@ -144,7 +144,7 @@ export default function ListaComidas({ comidas, categorias, cargando, onCambio }
       <div className="flex flex-col gap-2 sm:flex-row">
         <label className="relative flex-1">
           <span className="sr-only">Buscar comida</span>
-          <IconoBuscar className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-crema-suave" />
+          <IconoBuscar className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-tinta-suave" />
           <input
             type="search"
             className="campo pl-9"
@@ -169,7 +169,7 @@ export default function ListaComidas({ comidas, categorias, cargando, onCambio }
       </div>
 
       {filtradas.length === 0 ? (
-        <div className="tarjeta p-8 text-center text-crema-suave">
+        <div className="tarjeta p-8 text-center text-tinta-suave">
           {comidas.length === 0 ? "Todavía no cargaste comidas. ¡Creá la primera!" : "No hay comidas con ese filtro."}
         </div>
       ) : (
@@ -184,37 +184,37 @@ export default function ListaComidas({ comidas, categorias, cargando, onCambio }
               {c.imagen_url ? (
                 <img src={c.imagen_url} alt={c.nombre} className="size-14 rounded-lg object-cover" loading="lazy" />
               ) : (
-                <div className="grid size-14 place-items-center rounded-lg bg-noche-3 text-center text-[10px] text-crema-suave">
+                <div className="grid size-14 place-items-center rounded-lg bg-borde text-center text-[10px] text-tinta-suave">
                   Sin imagen
                 </div>
               )}
 
               <div className="min-w-0">
                 <p className="flex items-center gap-1 truncate font-semibold">
-                  {c.destacado && <IconoEstrella className="size-3.5 shrink-0 text-queso" />}
+                  {c.destacado && <IconoEstrella className="size-3.5 shrink-0 text-palmera" />}
                   <span className="truncate">{c.nombre}</span>
                 </p>
-                <p className="text-xs text-crema-suave">{nombreCategoria.get(c.categoria_id) ?? "Sin categoría"}</p>
+                <p className="text-xs text-tinta-suave">{nombreCategoria.get(c.categoria_id) ?? "Sin categoría"}</p>
               </div>
 
               <div className="col-span-2 text-sm lg:col-span-1">
-                <span className={c.precio_promo ? "text-xs text-crema-suave line-through" : "font-semibold"}>
+                <span className={c.precio_promo ? "text-xs text-tinta-suave line-through" : "font-semibold"}>
                   {formatearPrecio(c.precio)}
                 </span>
                 {c.precio_promo && (
-                  <span className="ml-2 font-semibold text-naranja">{formatearPrecio(c.precio_promo)}</span>
+                  <span className="ml-2 font-semibold text-brasa">{formatearPrecio(c.precio_promo)}</span>
                 )}
               </div>
 
               <div className="col-span-2 flex items-center gap-2 lg:col-span-1">
-                <span className="text-xs text-crema-suave lg:hidden">Stock</span>
+                <span className="text-xs text-tinta-suave lg:hidden">Stock</span>
                 <EditorStock
                   comida={c}
                   onGuardar={(n) => actualizar(c, { stock: n }, `Stock de "${c.nombre}": ${n}`)}
                 />
               </div>
 
-              <label className="flex items-center gap-2 text-xs text-crema-suave">
+              <label className="flex items-center gap-2 text-xs text-tinta-suave">
                 <Interruptor
                   activo={c.destacado}
                   etiqueta={`Destacado: ${c.nombre}`}
@@ -225,7 +225,7 @@ export default function ListaComidas({ comidas, categorias, cargando, onCambio }
                 Destacado
               </label>
 
-              <label className="flex items-center gap-2 text-xs text-crema-suave">
+              <label className="flex items-center gap-2 text-xs text-tinta-suave">
                 <Interruptor
                   activo={c.activo}
                   etiqueta={`Activo: ${c.nombre}`}
@@ -242,7 +242,7 @@ export default function ListaComidas({ comidas, categorias, cargando, onCambio }
                 </button>
                 <button
                   type="button"
-                  className="boton-secundario px-3 py-2 hover:text-naranja"
+                  className="boton-secundario px-3 py-2 hover:text-brasa"
                   onClick={() => setABorrar(c)}
                   aria-label={`Borrar ${c.nombre}`}
                 >

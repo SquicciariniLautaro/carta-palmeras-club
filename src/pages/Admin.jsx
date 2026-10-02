@@ -19,7 +19,7 @@ export default function Admin() {
         <div className="tarjeta w-full max-w-sm p-6 text-center">
           <Logo className="mx-auto h-24 w-auto" />
           <h1 className="mt-5 text-xl font-semibold">No tenés permisos</h1>
-          <p className="mt-2 text-sm text-crema-suave">
+          <p className="mt-2 text-sm text-tinta-suave">
             {errorChequeo
               ? "No pudimos verificar tus permisos. Revisá tu conexión."
               : `La cuenta ${sesion.user.email} no es administradora de este sitio.`}
