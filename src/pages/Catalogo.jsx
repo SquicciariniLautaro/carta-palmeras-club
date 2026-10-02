@@ -49,11 +49,19 @@ export default function Catalogo() {
   );
 }
 
+const DURACION_INTRO_MS = 2800;
+
 function CatalogoContenido() {
   const carrito = useCarrito();
   const [datos, setDatos] = useState({ categorias: [], comidas: [] });
   const [estado, setEstado] = useState("cargando"); // cargando | listo | error
   const [primeraCarga, setPrimeraCarga] = useState(true);
+  // La pantalla de carga se muestra al menos este tiempo para que se aprecie la marca
+  const [intro, setIntro] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setIntro(false), DURACION_INTRO_MS);
+    return () => clearTimeout(t);
+  }, []);
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState("todos");
   const [detalleId, setDetalleId] = useState(null);
@@ -233,7 +241,7 @@ function CatalogoContenido() {
   const cerrarCarrito = useCallback(() => setCarritoAbierto(false), []);
   const detalle = detalleId ? comidasPorId.get(detalleId) : null;
 
-  if (primeraCarga && estado === "cargando") return <Preloader />;
+  if (intro || (primeraCarga && estado === "cargando")) return <Preloader />;
 
   return (
     <div className="flex min-h-dvh flex-col">

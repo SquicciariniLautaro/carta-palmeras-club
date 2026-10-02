@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { formatearPrecio, precioFinal } from "../../lib/formato";
 import { IconoBasura, IconoBolsa, IconoCerrar, IconoWhatsApp } from "../ui/Iconos";
-import { ENTREGA } from "../../lib/whatsapp";
+import { DIRECCION_VACIA, ENTREGA } from "../../lib/whatsapp";
 import ControlCantidad from "./ControlCantidad";
 
 // Panel lateral del pedido. Se cierra con Escape o tocando el fondo.
@@ -20,7 +20,8 @@ export default function Carrito({
   const [cliente, setCliente] = useState("");
   const [nota, setNota] = useState("");
   const [entrega, setEntrega] = useState(ENTREGA.retiro);
-  const [direccion, setDireccion] = useState("");
+  const [direccion, setDireccion] = useState(DIRECCION_VACIA);
+  const cambiarDireccion = (campo) => (e) => setDireccion((d) => ({ ...d, [campo]: e.target.value }));
   const panelRef = useRef(null);
 
   useEffect(() => {
@@ -45,13 +46,13 @@ export default function Carrito({
       cliente: cliente.trim(),
       nota: nota.trim(),
       entrega,
-      direccion: direccion.trim(),
+      direccion: Object.fromEntries(Object.entries(direccion).map(([k, v]) => [k, v.trim()])),
     });
     if (ok) {
       setCliente("");
       setNota("");
       setEntrega(ENTREGA.retiro);
-      setDireccion("");
+      setDireccion(DIRECCION_VACIA);
     }
   }
 
@@ -178,20 +179,66 @@ export default function Carrito({
                   </div>
                 </fieldset>
                 {entrega === ENTREGA.envio && (
-                  <div>
-                    <label htmlFor="direccion" className="etiqueta">
-                      Tu dirección
-                    </label>
-                    <input
-                      id="direccion"
-                      className="campo"
-                      value={direccion}
-                      onChange={(e) => setDireccion(e.target.value)}
-                      maxLength={100}
-                      required
-                      autoComplete="street-address"
-                      placeholder="Calle, número, barrio"
-                    />
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-[1fr_6rem] gap-2">
+                      <div>
+                        <label htmlFor="calle" className="etiqueta">
+                          Calle
+                        </label>
+                        <input
+                          id="calle"
+                          className="campo"
+                          value={direccion.calle}
+                          onChange={cambiarDireccion("calle")}
+                          maxLength={50}
+                          required
+                          autoComplete="address-line1"
+                          placeholder="Ej.: Belgrano"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="numero" className="etiqueta">
+                          Número
+                        </label>
+                        <input
+                          id="numero"
+                          className="campo"
+                          value={direccion.numero}
+                          onChange={cambiarDireccion("numero")}
+                          maxLength={8}
+                          required
+                          inputMode="numeric"
+                          placeholder="123"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label htmlFor="barrio" className="etiqueta">
+                        Barrio
+                      </label>
+                      <input
+                        id="barrio"
+                        className="campo"
+                        value={direccion.barrio}
+                        onChange={cambiarDireccion("barrio")}
+                        maxLength={40}
+                        required
+                        placeholder="Ej.: Centro"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="indicaciones" className="etiqueta">
+                        Indicaciones para el delivery (opcional)
+                      </label>
+                      <input
+                        id="indicaciones"
+                        className="campo"
+                        value={direccion.indicaciones}
+                        onChange={cambiarDireccion("indicaciones")}
+                        maxLength={70}
+                        placeholder="Ej.: casa de rejas negras, timbre roto"
+                      />
+                    </div>
                   </div>
                 )}
                 <div>
@@ -204,7 +251,7 @@ export default function Carrito({
                     rows={2}
                     value={nota}
                     onChange={(e) => setNota(e.target.value)}
-                    maxLength={150}
+                    maxLength={entrega === ENTREGA.envio ? 80 : 150}
                     placeholder="Ej.: sin cebolla, para las 21"
                   />
                 </div>

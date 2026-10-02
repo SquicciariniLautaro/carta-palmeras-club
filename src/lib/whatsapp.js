@@ -9,12 +9,20 @@ export function linkWhatsApp(mensaje) {
 // así el dueño recibe exactamente lo que quedó registrado.
 export const ENTREGA = { retiro: "retiro", envio: "envio" };
 
+export const DIRECCION_VACIA = { calle: "", numero: "", barrio: "", indicaciones: "" };
+
+function textoDireccion({ calle, numero, barrio }) {
+  return `${calle} ${numero}, ${barrio}`;
+}
+
 // La entrega se guarda dentro de la nota de la venta para que el dueño la vea
-// también en el panel, sin tocar la base de datos.
+// también en el panel, sin tocar la base de datos. Largos máximos de los campos
+// (ver Carrito.jsx) para que el total entre en los 300 caracteres de la nota.
 export function notaParaRegistro({ nota, entrega, direccion }) {
-  const entregaTexto =
-    entrega === ENTREGA.envio ? `Envío a domicilio: ${direccion}` : "Retira en el local";
-  return [entregaTexto, nota].filter(Boolean).join(". ");
+  if (entrega !== ENTREGA.envio) return ["Retira en el local", nota].filter(Boolean).join(". ");
+  const envio = `Envío a domicilio: ${textoDireccion(direccion)}`;
+  const indicaciones = direccion.indicaciones && `Indicaciones: ${direccion.indicaciones}`;
+  return [envio, indicaciones, nota].filter(Boolean).join(". ");
 }
 
 export function armarMensajePedido({ numero, items, total, cliente, nota, entrega, direccion }) {
@@ -26,7 +34,8 @@ export function armarMensajePedido({ numero, items, total, cliente, nota, entreg
   partes.push(`*Pedido #${numero}*`);
   if (cliente) partes.push(`*A nombre de:* ${cliente}`);
   if (entrega === ENTREGA.envio) {
-    partes.push("*Entrega:* Envío a domicilio", `*Dirección:* ${direccion}`);
+    partes.push("*Entrega:* Envío a domicilio", `*Dirección:* ${textoDireccion(direccion)}`);
+    if (direccion.indicaciones) partes.push(`*Indicaciones:* ${direccion.indicaciones}`);
   } else {
     partes.push("*Entrega:* Retiro en el local");
   }
