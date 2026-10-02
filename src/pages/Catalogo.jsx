@@ -3,7 +3,7 @@ import toast from "react-hot-toast";
 import { LIMITES, NEGOCIO } from "../config";
 import { supabase, mensajeDeError, supabaseConfigurado } from "../lib/supabase";
 import { normalizarTexto, precioFinal, tienePromo } from "../lib/formato";
-import { armarMensajePedido, linkWhatsApp, mensajeConsulta } from "../lib/whatsapp";
+import { armarMensajePedido, linkWhatsApp, mensajeConsulta, notaParaRegistro } from "../lib/whatsapp";
 import { revalidarCarrito, useCarrito } from "../hooks/useCarrito";
 import CarritoProvider from "../components/catalogo/CarritoProvider";
 import Navbar from "../components/catalogo/Navbar";
@@ -184,7 +184,7 @@ function CatalogoContenido() {
     abrirWhatsApp(linkWhatsApp(mensajeConsulta(comida)));
   }
 
-  async function enviarPedido({ cliente, nota }) {
+  async function enviarPedido({ cliente, nota, entrega, direccion }) {
     if (lineas.length === 0) return false;
     if (!NEGOCIO.whatsapp) {
       toast.error("Falta configurar el número de WhatsApp del negocio.");
@@ -200,7 +200,7 @@ function CatalogoContenido() {
     const { data, error } = await supabase.rpc("crear_pedido", {
       items: lineas.map((l) => ({ comida_id: l.comida.id, cantidad: l.cantidad })),
       cliente_nombre: cliente || null,
-      nota: nota || null,
+      nota: notaParaRegistro({ nota, entrega, direccion }) || null,
     });
     setEnviando(false);
 
@@ -218,6 +218,8 @@ function CatalogoContenido() {
       total: data.total,
       cliente,
       nota,
+      entrega,
+      direccion,
     });
     abrirWhatsApp(linkWhatsApp(mensaje), ventana);
 
@@ -239,8 +241,9 @@ function CatalogoContenido() {
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4">
         <section className="pb-2 pt-4 text-center">
-          <h1 className="font-script text-5xl leading-tight text-palmera sm:text-6xl">Nuestro menú</h1>
-          <p className="text-sm text-tinta-suave">Armá tu pedido y mandalo por WhatsApp.</p>
+          <h1 className="font-script text-5xl leading-tight text-palmera sm:text-6xl">{NEGOCIO.nombre}</h1>
+          <h2 className="text-sm font-semibold uppercase tracking-[0.3em] text-tinta">Nuestra carta</h2>
+          <p className="mt-1 text-sm text-tinta-suave">Armá tu pedido y mandalo por WhatsApp.</p>
         </section>
 
         {estado === "error" ? (

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { supabase, mensajeDeError } from "../../lib/supabase";
 import { borrarImagen } from "../../lib/imagenes";
@@ -19,7 +19,21 @@ function EditorStock({ comida, onGuardar }) {
     setValor(String(comida.stock));
   }
 
+  // Los botones – y + solo cambian el número en pantalla; el guardado (y el
+  // aviso) ocurre una vez, cuando el dueño deja de tocar.
+  const temporizador = useRef(null);
+
+  function cambiarCon(delta) {
+    const actual = Number(valor);
+    const base = Number.isInteger(actual) && actual >= 0 ? actual : comida.stock;
+    const nuevo = Math.max(0, base + delta);
+    setValor(String(nuevo));
+    clearTimeout(temporizador.current);
+    temporizador.current = setTimeout(() => confirmar(nuevo), 900);
+  }
+
   function confirmar(nuevo) {
+    clearTimeout(temporizador.current);
     const n = Number(nuevo);
     if (!Number.isInteger(n) || n < 0) {
       toast.error("El stock tiene que ser un número entero mayor o igual a 0.");
@@ -34,8 +48,8 @@ function EditorStock({ comida, onGuardar }) {
       <button
         type="button"
         className="grid size-8 place-items-center rounded-lg bg-borde hover:bg-brasa hover:text-fondo disabled:opacity-40"
-        onClick={() => confirmar(comida.stock - 1)}
-        disabled={comida.stock <= 0}
+        onClick={() => cambiarCon(-1)}
+        disabled={Number(valor) <= 0}
         aria-label={`Restar stock de ${comida.nombre}`}
       >
         <IconoMenos className="size-4" />
@@ -55,7 +69,7 @@ function EditorStock({ comida, onGuardar }) {
       <button
         type="button"
         className="grid size-8 place-items-center rounded-lg bg-palmera text-fondo hover:bg-palmera-oscuro"
-        onClick={() => confirmar(comida.stock + 1)}
+        onClick={() => cambiarCon(1)}
         aria-label={`Sumar stock de ${comida.nombre}`}
       >
         <IconoMas className="size-4" />

@@ -61,9 +61,10 @@ export default function Footer() {
           </div>
 
           <div className="space-y-2">
-            <h2 className="font-script text-3xl text-palmera">Pedidos</h2>
+            <h2 className="font-script text-3xl text-palmera">¿Con hambre?</h2>
             <p className="text-sm text-tinta-suave">
-              Armá tu pedido en esta página y te llega directo por WhatsApp. Te confirmamos la demora y la forma de pago.
+              Elegí tus favoritos, armá tu pedido y mandalo directo a nuestro WhatsApp. Retirás en el local o te lo
+              llevamos a tu casa.
             </p>
           </div>
 

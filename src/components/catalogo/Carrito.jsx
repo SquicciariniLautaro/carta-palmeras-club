@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { formatearPrecio, precioFinal } from "../../lib/formato";
 import { IconoBasura, IconoBolsa, IconoCerrar, IconoWhatsApp } from "../ui/Iconos";
+import { ENTREGA } from "../../lib/whatsapp";
 import ControlCantidad from "./ControlCantidad";
 
 // Panel lateral del pedido. Se cierra con Escape o tocando el fondo.
@@ -18,6 +19,8 @@ export default function Carrito({
 }) {
   const [cliente, setCliente] = useState("");
   const [nota, setNota] = useState("");
+  const [entrega, setEntrega] = useState(ENTREGA.retiro);
+  const [direccion, setDireccion] = useState("");
   const panelRef = useRef(null);
 
   useEffect(() => {
@@ -38,10 +41,17 @@ export default function Carrito({
 
   async function enviar(e) {
     e.preventDefault();
-    const ok = await onEnviar({ cliente: cliente.trim(), nota: nota.trim() });
+    const ok = await onEnviar({
+      cliente: cliente.trim(),
+      nota: nota.trim(),
+      entrega,
+      direccion: direccion.trim(),
+    });
     if (ok) {
       setCliente("");
       setNota("");
+      setEntrega(ENTREGA.retiro);
+      setDireccion("");
     }
   }
 
@@ -127,7 +137,7 @@ export default function Carrito({
               <div className="space-y-3 border-t border-borde pt-3">
                 <div>
                   <label htmlFor="cliente" className="etiqueta">
-                    Tu nombre (opcional)
+                    Tu nombre
                   </label>
                   <input
                     id="cliente"
@@ -136,9 +146,54 @@ export default function Carrito({
                     onChange={(e) => setCliente(e.target.value)}
                     maxLength={80}
                     autoComplete="name"
-                    placeholder="Ej.: Juli"
+                    placeholder="Insertar nombre"
                   />
                 </div>
+                <fieldset>
+                  <legend className="etiqueta">¿Cómo lo recibís?</legend>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      [ENTREGA.retiro, "Retiro en el local"],
+                      [ENTREGA.envio, "Envío a domicilio"],
+                    ].map(([valor, texto]) => (
+                      <label
+                        key={valor}
+                        className={`cursor-pointer rounded-xl border px-3 py-2.5 text-center text-sm font-medium transition ${
+                          entrega === valor
+                            ? "border-palmera bg-palmera text-white"
+                            : "border-borde bg-papel text-tinta hover:bg-borde"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="entrega"
+                          value={valor}
+                          checked={entrega === valor}
+                          onChange={() => setEntrega(valor)}
+                          className="sr-only"
+                        />
+                        {texto}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+                {entrega === ENTREGA.envio && (
+                  <div>
+                    <label htmlFor="direccion" className="etiqueta">
+                      Tu dirección
+                    </label>
+                    <input
+                      id="direccion"
+                      className="campo"
+                      value={direccion}
+                      onChange={(e) => setDireccion(e.target.value)}
+                      maxLength={100}
+                      required
+                      autoComplete="street-address"
+                      placeholder="Calle, número, barrio"
+                    />
+                  </div>
+                )}
                 <div>
                   <label htmlFor="nota" className="etiqueta">
                     Nota para el pedido (opcional)
@@ -149,8 +204,8 @@ export default function Carrito({
                     rows={2}
                     value={nota}
                     onChange={(e) => setNota(e.target.value)}
-                    maxLength={300}
-                    placeholder="Ej.: sin cebolla, para retirar a las 21"
+                    maxLength={150}
+                    placeholder="Ej.: sin cebolla, para las 21"
                   />
                 </div>
               </div>
