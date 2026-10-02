@@ -1,0 +1,174 @@
+import { useEffect, useRef, useState } from "react";
+import { formatearPrecio, precioFinal } from "../../lib/formato";
+import { IconoBasura, IconoBolsa, IconoCerrar, IconoWhatsApp } from "../ui/Iconos";
+import ControlCantidad from "./ControlCantidad";
+
+// Panel lateral del pedido. Se cierra con Escape o tocando el fondo.
+export default function Carrito({
+  abierto,
+  onCerrar,
+  lineas,
+  total,
+  onSumar,
+  onRestar,
+  onEliminar,
+  onVaciar,
+  onEnviar,
+  enviando,
+}) {
+  const [cliente, setCliente] = useState("");
+  const [nota, setNota] = useState("");
+  const panelRef = useRef(null);
+
+  useEffect(() => {
+    if (!abierto) return;
+    const alPresionar = (e) => {
+      if (e.key === "Escape") onCerrar();
+    };
+    document.addEventListener("keydown", alPresionar);
+    // Bloquear el scroll de fondo y llevar el foco al panel
+    const overflowAnterior = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    panelRef.current?.focus();
+    return () => {
+      document.removeEventListener("keydown", alPresionar);
+      document.body.style.overflow = overflowAnterior;
+    };
+  }, [abierto, onCerrar]);
+
+  async function enviar(e) {
+    e.preventDefault();
+    const ok = await onEnviar({ cliente: cliente.trim(), nota: nota.trim() });
+    if (ok) {
+      setCliente("");
+      setNota("");
+    }
+  }
+
+  return (
+    <div className={`fixed inset-0 z-40 ${abierto ? "" : "pointer-events-none"}`} aria-hidden={!abierto}>
+      <div
+        className={`absolute inset-0 bg-black/60 transition-opacity ${abierto ? "opacity-100" : "opacity-0"}`}
+        onClick={onCerrar}
+      />
+      <aside
+        ref={panelRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Mi pedido"
+        inert={!abierto}
+        className={`absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-noche-2 shadow-2xl transition-transform duration-300 focus:outline-none ${
+          abierto ? "translate-x-0" : "translate-x-full"
+        }`}
+      >
+        <div className="flex items-center justify-between border-b border-noche-3 px-4 py-3">
+          <h2 className="flex items-center gap-2 text-lg font-semibold">
+            <IconoBolsa className="size-5 text-queso" /> Mi pedido
+          </h2>
+          <button
+            type="button"
+            onClick={onCerrar}
+            className="rounded-full p-1.5 text-crema-suave hover:bg-noche-3 hover:text-crema"
+            aria-label="Cerrar pedido"
+          >
+            <IconoCerrar />
+          </button>
+        </div>
+
+        {lineas.length === 0 ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-crema-suave">
+            <IconoBolsa className="size-12 opacity-40" />
+            <p className="font-medium text-crema">Tu pedido está vacío</p>
+            <p className="text-sm">Agregá algo rico del menú para empezar.</p>
+          </div>
+        ) : (
+          <form onSubmit={enviar} className="flex min-h-0 flex-1 flex-col">
+            <div className="flex-1 space-y-3 overflow-y-auto p-4">
+              <ul className="space-y-3">
+                {lineas.map(({ comida, cantidad }) => (
+                  <li key={comida.id} className="rounded-xl border border-noche-3 bg-noche/50 p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold">{comida.nombre}</p>
+                        <p className="text-xs text-crema-suave">
+                          {formatearPrecio(precioFinal(comida))} c/u ·{" "}
+                          <span className="font-semibold text-crema">
+                            {formatearPrecio(precioFinal(comida) * cantidad)}
+                          </span>
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onEliminar(comida)}
+                        className="rounded-lg p-1.5 text-crema-suave hover:bg-noche-3 hover:text-naranja"
+                        aria-label={`Eliminar ${comida.nombre} del pedido`}
+                      >
+                        <IconoBasura className="size-4" />
+                      </button>
+                    </div>
+                    <div className="mt-2 w-32">
+                      <ControlCantidad
+                        cantidad={cantidad}
+                        onSumar={() => onSumar(comida)}
+                        onRestar={() => onRestar(comida)}
+                        nombre={comida.nombre}
+                        chico
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+
+              <button type="button" onClick={onVaciar} className="text-xs text-crema-suave underline hover:text-naranja">
+                Vaciar pedido
+              </button>
+
+              <div className="space-y-3 border-t border-noche-3 pt-3">
+                <div>
+                  <label htmlFor="cliente" className="etiqueta">
+                    Tu nombre (opcional)
+                  </label>
+                  <input
+                    id="cliente"
+                    className="campo"
+                    value={cliente}
+                    onChange={(e) => setCliente(e.target.value)}
+                    maxLength={80}
+                    autoComplete="name"
+                    placeholder="Ej.: Juli"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="nota" className="etiqueta">
+                    Nota para el pedido (opcional)
+                  </label>
+                  <textarea
+                    id="nota"
+                    className="campo resize-none"
+                    rows={2}
+                    value={nota}
+                    onChange={(e) => setNota(e.target.value)}
+                    maxLength={300}
+                    placeholder="Ej.: sin cebolla, para retirar a las 21"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3 border-t border-noche-3 p-4">
+              <div className="flex items-center justify-between text-lg font-bold">
+                <span>Total</span>
+                <span>{formatearPrecio(total)}</span>
+              </div>
+              <button type="submit" className="boton-whatsapp w-full py-3 text-base" disabled={enviando}>
+                <IconoWhatsApp />
+                {enviando ? "Registrando pedido…" : "Enviar pedido por WhatsApp"}
+              </button>
+            </div>
+          </form>
+        )}
+      </aside>
+    </div>
+  );
+}
