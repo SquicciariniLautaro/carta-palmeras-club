@@ -86,7 +86,10 @@ export default function OpcionesComida({ valor, onCambio, errores }) {
 
       <div className="space-y-2">
         <p className="text-sm font-medium">Extras con costo</p>
-        <p className="text-xs text-tinta-suave">Cosas que el cliente puede sumar, por ejemplo Huevo o Medallón extra.</p>
+        <p className="text-xs text-tinta-suave">
+          Cosas que el cliente puede sumar, por ejemplo carne extra o huevo. Con precio 0, el cliente ve "Precio a confirmar" y
+          vos le confirmás el valor por WhatsApp. Para que un extra no aparezca, borralo.
+        </p>
         <Filas
           filas={valor.agregar}
           onCambiar={set("agregar")}

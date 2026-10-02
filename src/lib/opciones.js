@@ -92,7 +92,13 @@ export function textoConfig(comida, config) {
   const partes = [];
   if (o.variantes.length > 0) partes.push(c.variante ?? o.variantes[0].nombre);
   if (c.quitar.length > 0) partes.push(`sin ${c.quitar.map((q) => q).join(", ")}`);
-  if (c.agregar.length > 0) partes.push(`extra ${c.agregar.join(", ")}`);
+  if (c.agregar.length > 0) {
+    const nombres = c.agregar.map((nombre) => {
+      const extra = o.agregar.find((a) => a.nombre === nombre);
+      return extra && extra.precio === 0 ? `${nombre} (precio a confirmar)` : nombre;
+    });
+    partes.push(`extra ${nombres.join(", ")}`);
+  }
   if (c.aclaracion) partes.push(`«${c.aclaracion}»`);
   return partes.join(" · ");
 }

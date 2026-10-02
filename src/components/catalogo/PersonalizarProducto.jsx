@@ -98,14 +98,20 @@ function Armado({ comida, restantes, onAgregar }) {
       )}
 
       {agregar.length > 0 && (
-        <Seccion titulo="¿Querés agregarle algo?">
+        <Seccion titulo="¿Querés agregarle algo?" ayuda="(el local te confirma el precio de los extras sin precio)">
           {agregar.map((a) => (
             <Opcion
               key={a.nombre}
               tipo="checkbox"
               marcado={config.agregar.includes(a.nombre)}
               onCambiar={() => alternar("agregar", a.nombre)}
-              precio={<span className="font-semibold">+ {formatearPrecio(a.precio)}</span>}
+              precio={
+                a.precio > 0 ? (
+                  <span className="font-semibold">+ {formatearPrecio(a.precio)}</span>
+                ) : (
+                  <span className="text-xs text-tinta-suave">Precio a confirmar</span>
+                )
+              }
             >
               {a.nombre}
             </Opcion>

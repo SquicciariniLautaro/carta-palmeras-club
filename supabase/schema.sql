@@ -243,7 +243,9 @@ begin
           raise exception '"%" no se puede agregar a "%". Actualizá la página.', v_texto, c.nombre;
         end if;
         v_precio  := v_precio + (v_extra ->> 'precio')::numeric;
-        v_agregar := v_agregar || (v_extra ->> 'nombre');
+        -- precio 0 = el local confirma el precio por WhatsApp
+        v_agregar := v_agregar || ((v_extra ->> 'nombre')
+                     || case when (v_extra ->> 'precio')::numeric = 0 then ' (precio a confirmar)' else '' end);
       end loop;
       if array_length(v_agregar, 1) > 0 then
         v_partes := v_partes || ('extra ' || array_to_string(v_agregar, ', '));
@@ -610,6 +612,9 @@ declare
   s       public.comidas%rowtype;
   v_vars  jsonb;
   v_opc   jsonb;
+  -- Extras de arranque con precio 0: el local confirma el precio por WhatsApp.
+  -- El dueño les pone precio (o los saca) desde el panel: Comidas → Editar.
+  v_extras jsonb := '[{"nombre":"Carne extra","precio":0},{"nombre":"Cheddar extra","precio":0},{"nombre":"Bacon extra","precio":0},{"nombre":"Huevo","precio":0}]'::jsonb;
 begin
   select id into v_cat from public.categorias where nombre = 'Burguers';
   if v_cat is null then
@@ -640,10 +645,15 @@ begin
     v_vars := jsonb_build_array(
       jsonb_build_object('nombre', 'Simple', 'precio', r.precio_simple),
       jsonb_build_object('nombre', 'Doble',  'precio', r.precio_doble));
-    v_opc := jsonb_build_object('variantes', v_vars, 'quitar', r.quitar);
+    v_opc := jsonb_build_object('variantes', v_vars, 'quitar', r.quitar, 'agregar', v_extras);
 
     if exists (select 1 from public.comidas where nombre = r.base) then
-      continue;   -- ya está unificada
+      -- ya está unificada: solo le damos los extras si nunca tuvo la lista
+      -- (si el dueño la dejó vacía desde el panel, queda guardada como [] y no se toca)
+      update public.comidas
+         set opciones = opciones || jsonb_build_object('agregar', v_extras)
+       where nombre = r.base and not (opciones ? 'agregar');
+      continue;
     end if;
 
     select * into d from public.comidas where nombre = r.base || ' doble';

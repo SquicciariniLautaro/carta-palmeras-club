@@ -116,7 +116,7 @@ Cada comida puede tener opciones para que el cliente arme su pedido. Se cargan d
 
 - **Variantes:** tamaños o versiones con su precio (Simple, Doble, Triple…). Si hay variantes, el precio de la comida sale de ellas y en el catálogo aparece "Desde $X".
 - **Ingredientes que se pueden sacar:** separados por coma (Cebolla, Tomate…). Sacar un ingrediente no cambia el precio.
-- **Extras con costo:** cosas que se suman al precio (Huevo, Medallón extra…).
+- **Extras con costo:** cosas que se suman al precio (carne extra, huevo…). Vienen cargados con precio 0: el cliente ve "Precio a confirmar" y el local le confirma el valor por WhatsApp. Poné el precio real cuando lo quieran fijo, o borrá el extra para que no aparezca.
 
 El cliente además puede escribir una aclaración (por ejemplo "bien cocida"). Todo llega en el mensaje de WhatsApp y se ve en el detalle de cada venta del panel. El stock es por comida: una doble y una simple de la misma hamburguesa descuentan del mismo stock.
 

@@ -52,9 +52,8 @@ export function validarOpciones(op) {
     valor.variantes = op.variantes.map((v) => ({ nombre: v.nombre.trim(), precio: Number(v.precio) }));
   }
   if (quitar.length > 0) valor.quitar = quitar;
-  if (op.agregar.length > 0) {
-    valor.agregar = op.agregar.map((a) => ({ nombre: a.nombre.trim(), precio: Number(a.precio) }));
-  }
+  // Siempre se guarda la lista (aunque esté vacía) para que quede claro que el dueño la configuró
+  valor.agregar = op.agregar.map((a) => ({ nombre: a.nombre.trim(), precio: Number(a.precio) }));
   return { errores, valor };
 }
 
