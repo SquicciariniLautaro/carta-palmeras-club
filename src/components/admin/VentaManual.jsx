@@ -2,37 +2,60 @@ import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { supabase, mensajeDeError } from "../../lib/supabase";
 import { formatearPrecio, precioFinal } from "../../lib/formato";
+import { opcionesDe } from "../../lib/opciones";
 import { IconoBasura, IconoMas } from "../ui/Iconos";
 import Modal from "../ui/Modal";
 
 // Registrar una venta hecha en el local: queda confirmada y descuenta stock
 export default function VentaManual({ abierto, comidas, onCerrar, onRegistrada }) {
-  const [lineas, setLineas] = useState([]); // [{ id, cantidad }]
+  const [lineas, setLineas] = useState([]); // [{ id, variante, cantidad }]
   const [seleccion, setSeleccion] = useState("");
   const [cantidad, setCantidad] = useState("1");
   const [cliente, setCliente] = useState("");
   const [nota, setNota] = useState("");
   const [guardando, setGuardando] = useState(false);
 
-  const porId = useMemo(() => new Map(comidas.map((c) => [c.id, c])), [comidas]);
-  const ordenadas = useMemo(() => [...comidas].sort((a, b) => a.nombre.localeCompare(b.nombre, "es")), [comidas]);
-  const total = lineas.reduce((acc, l) => {
-    const c = porId.get(l.id);
-    return c ? acc + precioFinal(c) * l.cantidad : acc;
-  }, 0);
+  // Una entrada por comida, o una por variante si la comida las tiene (Simple, Doble…)
+  const entradas = useMemo(() => {
+    const lista = [];
+    for (const c of [...comidas].sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))) {
+      const { variantes } = opcionesDe(c);
+      if (variantes.length === 0) {
+        lista.push({ valor: c.id, comida: c, variante: null, nombre: c.nombre, precio: precioFinal(c) });
+      } else {
+        for (const v of variantes) {
+          lista.push({
+            valor: `${c.id}|${v.nombre}`,
+            comida: c,
+            variante: v.nombre,
+            nombre: `${c.nombre} · ${v.nombre}`,
+            precio: v.precio,
+          });
+        }
+      }
+    }
+    return lista;
+  }, [comidas]);
+  const entradaPorValor = useMemo(() => new Map(entradas.map((e) => [e.valor, e])), [entradas]);
+  const valorDe = (l) => (l.variante ? `${l.id}|${l.variante}` : l.id);
+  const total = lineas.reduce((acc, l) => acc + (entradaPorValor.get(valorDe(l))?.precio ?? 0) * l.cantidad, 0);
 
   function agregar(e) {
     e.preventDefault();
-    const comida = porId.get(seleccion);
+    const entrada = entradaPorValor.get(seleccion);
     const n = Number(cantidad);
-    if (!comida) return toast.error("Elegí una comida.");
+    if (!entrada) return toast.error("Elegí una comida.");
     if (!Number.isInteger(n) || n <= 0) return toast.error("La cantidad tiene que ser un entero mayor a 0.");
-    const yaHay = lineas.find((l) => l.id === comida.id)?.cantidad ?? 0;
-    if (yaHay + n > comida.stock) {
+    const comida = entrada.comida;
+    const yaHayDeLaComida = lineas.filter((l) => l.id === comida.id).reduce((acc, l) => acc + l.cantidad, 0);
+    if (yaHayDeLaComida + n > comida.stock) {
       return toast.error(`No hay stock suficiente de "${comida.nombre}" (quedan ${comida.stock}).`);
     }
+    const existe = lineas.some((l) => valorDe(l) === entrada.valor);
     setLineas((prev) =>
-      yaHay ? prev.map((l) => (l.id === comida.id ? { ...l, cantidad: l.cantidad + n } : l)) : [...prev, { id: comida.id, cantidad: n }]
+      existe
+        ? prev.map((l) => (valorDe(l) === entrada.valor ? { ...l, cantidad: l.cantidad + n } : l))
+        : [...prev, { id: comida.id, variante: entrada.variante, cantidad: n }]
     );
     setSeleccion("");
     setCantidad("1");
@@ -50,7 +73,7 @@ export default function VentaManual({ abierto, comidas, onCerrar, onRegistrada }
     if (lineas.length === 0) return;
     setGuardando(true);
     const { data, error } = await supabase.rpc("registrar_venta_manual", {
-      items: lineas.map((l) => ({ comida_id: l.id, cantidad: l.cantidad })),
+      items: lineas.map((l) => ({ comida_id: l.id, cantidad: l.cantidad, variante: l.variante })),
       cliente_nombre: cliente.trim() || null,
       nota: nota.trim() || null,
     });
@@ -73,10 +96,10 @@ export default function VentaManual({ abierto, comidas, onCerrar, onRegistrada }
           </label>
           <select id="vm-comida" className="campo flex-1" value={seleccion} onChange={(e) => setSeleccion(e.target.value)}>
             <option value="">Elegí una comida…</option>
-            {ordenadas.map((c) => (
-              <option key={c.id} value={c.id} disabled={c.stock <= 0}>
-                {c.nombre} · {formatearPrecio(precioFinal(c))} · stock {c.stock}
-                {c.activo ? "" : " (inactiva)"}
+            {entradas.map((e) => (
+              <option key={e.valor} value={e.valor} disabled={e.comida.stock <= 0}>
+                {e.nombre} · {formatearPrecio(e.precio)} · stock {e.comida.stock}
+                {e.comida.activo ? "" : " (inactiva)"}
               </option>
             ))}
           </select>
@@ -103,20 +126,20 @@ export default function VentaManual({ abierto, comidas, onCerrar, onRegistrada }
         ) : (
           <ul className="divide-y divide-borde rounded-xl bg-fondo px-3">
             {lineas.map((l) => {
-              const c = porId.get(l.id);
-              if (!c) return null;
+              const e = entradaPorValor.get(valorDe(l));
+              if (!e) return null;
               return (
-                <li key={l.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+                <li key={valorDe(l)} className="flex items-center justify-between gap-2 py-2 text-sm">
                   <span className="min-w-0 truncate">
-                    <strong>{l.cantidad}x</strong> {c.nombre}
+                    <strong>{l.cantidad}x</strong> {e.nombre}
                   </span>
                   <span className="flex shrink-0 items-center gap-2">
-                    {formatearPrecio(precioFinal(c) * l.cantidad)}
+                    {formatearPrecio(e.precio * l.cantidad)}
                     <button
                       type="button"
                       className="rounded p-1 text-tinta-suave hover:text-brasa"
-                      onClick={() => setLineas((prev) => prev.filter((x) => x.id !== l.id))}
-                      aria-label={`Quitar ${c.nombre}`}
+                      onClick={() => setLineas((prev) => prev.filter((x) => valorDe(x) !== valorDe(l)))}
+                      aria-label={`Quitar ${e.nombre}`}
                     >
                       <IconoBasura className="size-4" />
                     </button>

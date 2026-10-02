@@ -30,9 +30,18 @@ create table if not exists public.comidas (
   destacado    boolean not null default false,
   activo       boolean not null default true,
   stock        int not null default 0 check (stock >= 0),
+  -- Opciones para personalizar el pedido (todas opcionales):
+  --   variantes: [{ "nombre": "Simple", "precio": 8500 }, ...]  (si hay, el precio sale de acá)
+  --   quitar:    ["Cebolla", "Tomate"]                          (ingredientes que se pueden sacar)
+  --   agregar:   [{ "nombre": "Huevo", "precio": 1000 }, ...]   (extras con costo)
+  opciones     jsonb not null default '{}'::jsonb check (jsonb_typeof(opciones) = 'object'),
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now()
 );
+
+-- Para bases creadas con una versión anterior de este archivo
+alter table public.comidas
+  add column if not exists opciones jsonb not null default '{}'::jsonb;
 
 create index if not exists comidas_categoria_idx on public.comidas (categoria_id);
 
@@ -55,10 +64,13 @@ create table if not exists public.venta_items (
   venta_id        uuid not null references public.ventas (id) on delete cascade,
   comida_id       uuid references public.comidas (id) on delete set null,
   nombre          text not null,              -- copia del nombre al momento de la venta
+  detalle         text,                       -- opción elegida, ingredientes sacados, extras, aclaración
   precio_unitario numeric(12,2) not null check (precio_unitario >= 0),
   cantidad        int not null check (cantidad > 0),
   subtotal        numeric(12,2) not null check (subtotal >= 0)
 );
+
+alter table public.venta_items add column if not exists detalle text;
 
 create index if not exists venta_items_venta_idx on public.venta_items (venta_id);
 create index if not exists venta_items_comida_idx on public.venta_items (comida_id);
@@ -107,7 +119,11 @@ $$;
 -- ---------------------------------------------------------------------
 
 -- Crea una venta con sus ítems tomando los precios de la base.
--- p_items: [{ "comida_id": "<uuid>", "cantidad": 2 }, ...]
+-- p_items: [{ "comida_id": "<uuid>", "cantidad": 2,
+--             "variante": "Doble", "quitar": ["Cebolla"], "agregar": ["Huevo"],
+--             "aclaracion": "bien cocida" }, ...]
+-- Solo comida_id y cantidad son obligatorios. Cada combinación distinta
+-- (por ejemplo una doble sin cebolla) es una línea aparte.
 create or replace function public._crear_venta(
   p_items jsonb,
   p_cliente_nombre text,
@@ -129,6 +145,12 @@ declare
   r          record;
   c          public.comidas%rowtype;
   v_precio   numeric(12,2);
+  v_var      jsonb;
+  v_extra    jsonb;
+  v_texto    text;
+  v_quitar   text[];
+  v_agregar  text[];
+  v_partes   text[];
 begin
   if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then
     raise exception 'El pedido está vacío.';
@@ -149,9 +171,13 @@ begin
 
   begin
     for r in
-      select x.comida_id, sum(x.cantidad)::int as cantidad
-      from jsonb_to_recordset(p_items) as x (comida_id uuid, cantidad int)
-      group by x.comida_id
+      select x.comida_id, x.cantidad,
+             nullif(btrim(x.variante), '') as variante,
+             coalesce(x.quitar, '[]'::jsonb) as quitar,
+             coalesce(x.agregar, '[]'::jsonb) as agregar,
+             nullif(btrim(x.aclaracion), '') as aclaracion
+      from jsonb_to_recordset(p_items)
+           as x (comida_id uuid, cantidad int, variante text, quitar jsonb, agregar jsonb, aclaracion text)
     loop
       if r.comida_id is null or r.cantidad is null or r.cantidad <= 0 then
         raise exception 'Hay un producto con datos inválidos en el pedido.';
@@ -159,10 +185,92 @@ begin
       if r.cantidad > 50 then
         raise exception 'Se pueden pedir hasta 50 unidades de cada producto.';
       end if;
+      if jsonb_typeof(r.quitar) <> 'array' or jsonb_typeof(r.agregar) <> 'array'
+         or jsonb_array_length(r.quitar) > 20 or jsonb_array_length(r.agregar) > 10 then
+        raise exception 'Las opciones del pedido no son válidas.';
+      end if;
+      if r.aclaracion is not null and length(r.aclaracion) > 80 then
+        raise exception 'La aclaración es demasiado larga (máximo 80 caracteres).';
+      end if;
 
       select * into c from public.comidas where id = r.comida_id;
       if not found or (p_solo_activas and not c.activo) then
         raise exception 'Un producto del pedido ya no está disponible. Actualizá la página e intentá de nuevo.';
+      end if;
+
+      v_precio  := coalesce(c.precio_promo, c.precio);   -- el precio sale de la base, nunca del cliente
+      v_partes  := '{}';
+      v_quitar  := '{}';
+      v_agregar := '{}';
+
+      -- Variante: si el producto tiene, su precio reemplaza al base (sin elegir, vale la primera)
+      if jsonb_typeof(c.opciones -> 'variantes') = 'array' and jsonb_array_length(c.opciones -> 'variantes') > 0 then
+        if r.variante is null then
+          v_var := (c.opciones -> 'variantes') -> 0;
+        else
+          select e into v_var
+            from jsonb_array_elements(c.opciones -> 'variantes') e
+           where e ->> 'nombre' = r.variante
+           limit 1;
+          if v_var is null then
+            raise exception 'La opción "%" ya no está disponible para "%". Actualizá la página.', r.variante, c.nombre;
+          end if;
+        end if;
+        v_precio := (v_var ->> 'precio')::numeric;
+        v_partes := v_partes || (v_var ->> 'nombre');
+      elsif r.variante is not null then
+        raise exception 'La opción "%" ya no está disponible para "%". Actualizá la página.', r.variante, c.nombre;
+      end if;
+
+      -- Ingredientes que se sacan (sin costo)
+      for v_texto in select distinct jsonb_array_elements_text(r.quitar) loop
+        if not (coalesce(c.opciones -> 'quitar', '[]'::jsonb) ? v_texto) then
+          raise exception '"%" no se puede sacar de "%". Actualizá la página.', v_texto, c.nombre;
+        end if;
+        v_quitar := v_quitar || v_texto;
+      end loop;
+      if array_length(v_quitar, 1) > 0 then
+        v_partes := v_partes || ('sin ' || array_to_string(v_quitar, ', '));
+      end if;
+
+      -- Extras (suman al precio)
+      for v_texto in select distinct jsonb_array_elements_text(r.agregar) loop
+        select e into v_extra
+          from jsonb_array_elements(coalesce(c.opciones -> 'agregar', '[]'::jsonb)) e
+         where e ->> 'nombre' = v_texto
+         limit 1;
+        if v_extra is null then
+          raise exception '"%" no se puede agregar a "%". Actualizá la página.', v_texto, c.nombre;
+        end if;
+        v_precio  := v_precio + (v_extra ->> 'precio')::numeric;
+        v_agregar := v_agregar || (v_extra ->> 'nombre');
+      end loop;
+      if array_length(v_agregar, 1) > 0 then
+        v_partes := v_partes || ('extra ' || array_to_string(v_agregar, ', '));
+      end if;
+
+      if r.aclaracion is not null then
+        v_partes := v_partes || ('"' || r.aclaracion || '"');
+      end if;
+
+      v_unidades := v_unidades + r.cantidad;
+      v_total    := v_total + v_precio * r.cantidad;
+
+      insert into public.venta_items (venta_id, comida_id, nombre, detalle, precio_unitario, cantidad, subtotal)
+      values (v_venta_id, c.id, c.nombre, nullif(array_to_string(v_partes, ' · '), ''),
+              v_precio, r.cantidad, v_precio * r.cantidad);
+    end loop;
+
+    -- Stock y tope por producto, sumando todas sus líneas
+    for r in
+      select vi.comida_id, sum(vi.cantidad)::int as cantidad
+      from public.venta_items vi
+      where vi.venta_id = v_venta_id
+      group by vi.comida_id
+    loop
+      select * into c from public.comidas where id = r.comida_id;
+      if r.cantidad > 50 then
+        raise exception 'Se pueden pedir hasta 50 unidades de cada producto.';
       end if;
       if c.stock < r.cantidad then
         if c.stock = 0 then
@@ -170,13 +278,6 @@ begin
         end if;
         raise exception 'No hay stock suficiente de "%": quedan %.', c.nombre, c.stock;
       end if;
-
-      v_precio   := coalesce(c.precio_promo, c.precio);   -- el precio sale de la base, nunca del cliente
-      v_unidades := v_unidades + r.cantidad;
-      v_total    := v_total + v_precio * r.cantidad;
-
-      insert into public.venta_items (venta_id, comida_id, nombre, precio_unitario, cantidad, subtotal)
-      values (v_venta_id, c.id, c.nombre, v_precio, r.cantidad, v_precio * r.cantidad);
     end loop;
   exception
     when invalid_text_representation or numeric_value_out_of_range then
@@ -278,9 +379,10 @@ begin
       'items',  coalesce((
         select jsonb_agg(jsonb_build_object(
                  'nombre', vi.nombre,
+                 'detalle', vi.detalle,
                  'cantidad', vi.cantidad,
                  'precio_unitario', vi.precio_unitario,
-                 'subtotal', vi.subtotal) order by vi.nombre)
+                 'subtotal', vi.subtotal) order by vi.nombre, vi.detalle nulls first)
         from public.venta_items vi where vi.venta_id = v.id), '[]'::jsonb)
     )
     from public.ventas v where v.id = v_id
@@ -496,27 +598,81 @@ insert into public.categorias (nombre, orden) values
   ('Bebidas', 7)
 on conflict (nombre) do nothing;
 
+-- Hamburguesas: un solo producto por hamburguesa, con variantes (Simple / Doble)
+-- y los ingredientes que se pueden sacar. Si la base todavía tiene los
+-- productos separados ("X doble" y "X simple"), los une en uno (conserva la
+-- foto y el stock del doble). Se puede volver a correr sin problema.
+do $$
+declare
+  v_cat   uuid;
+  r       record;
+  d       public.comidas%rowtype;
+  s       public.comidas%rowtype;
+  v_vars  jsonb;
+  v_opc   jsonb;
+begin
+  select id into v_cat from public.categorias where nombre = 'Burguers';
+  if v_cat is null then
+    return;
+  end if;
+
+  for r in
+    select * from (values
+      ('Burguer Cheese', 'Medallones de carne y cheddar.', 7500, 11000, '[]'::jsonb),
+      ('Burguer Big Mac', 'Medallones de carne, salsa Big Mac, cheddar, pepinillos, lechuga y cebolla.', 8500, 11000,
+        '["Salsa Big Mac","Cheddar","Pepinillos","Lechuga","Cebolla"]'::jsonb),
+      ('Burguer Big Bang', 'Medallones de carne, salsa de la casa, cheddar, cebolla y bacon.', 8500, 11000,
+        '["Salsa de la casa","Cheddar","Cebolla","Bacon"]'::jsonb),
+      ('Burguer Texas', 'Medallones de carne, cheddar, bacon, barbacoa y aros de cebolla.', 8500, 11000,
+        '["Cheddar","Bacon","Barbacoa","Aros de cebolla"]'::jsonb),
+      ('Burguer Milwaukee', 'Medallones de carne, cheddar, bacon, cebolla crispy, lechuga, tomate y mayonesa.', 8500, 11000,
+        '["Cheddar","Bacon","Cebolla crispy","Lechuga","Tomate","Mayonesa"]'::jsonb),
+      ('Burguer Cuarto de Libra', 'Medallones de carne, cheddar, extra bacon y cebolla en cubos.', 8500, 11000,
+        '["Cheddar","Extra bacon","Cebolla en cubos"]'::jsonb),
+      ('Burguer Americana', 'Medallones de carne, cheddar, extra bacon, pepinillos, cebolla morada, ketchup y alioli.', 8500, 11000,
+        '["Cheddar","Extra bacon","Pepinillos","Cebolla morada","Ketchup","Alioli"]'::jsonb),
+      ('Burguer Alabama', 'Medallones de carne, cheddar, pepinillos, cebolla crispy, lechuga, tomate y mayonesa.', 8500, 11000,
+        '["Cheddar","Pepinillos","Cebolla crispy","Lechuga","Tomate","Mayonesa"]'::jsonb),
+      ('Burguer CBH', 'Medallones de carne, cheddar, extra bacon, manteca y miel.', 8500, 11000,
+        '["Cheddar","Extra bacon","Manteca","Miel"]'::jsonb)
+    ) as t (base, descripcion, precio_simple, precio_doble, quitar)
+  loop
+    v_vars := jsonb_build_array(
+      jsonb_build_object('nombre', 'Simple', 'precio', r.precio_simple),
+      jsonb_build_object('nombre', 'Doble',  'precio', r.precio_doble));
+    v_opc := jsonb_build_object('variantes', v_vars, 'quitar', r.quitar);
+
+    if exists (select 1 from public.comidas where nombre = r.base) then
+      continue;   -- ya está unificada
+    end if;
+
+    select * into d from public.comidas where nombre = r.base || ' doble';
+    select * into s from public.comidas where nombre = r.base || ' simple';
+
+    if d.id is not null then
+      update public.comidas
+         set nombre       = r.base,
+             descripcion  = r.descripcion,
+             precio       = r.precio_simple,
+             precio_promo = null,
+             opciones     = v_opc,
+             imagen_url   = coalesce(d.imagen_url, s.imagen_url),
+             imagen_path  = case when d.imagen_url is null then s.imagen_path else d.imagen_path end
+       where id = d.id;
+      if s.id is not null then
+        delete from public.comidas where id = s.id;   -- las ventas viejas conservan el nombre
+      end if;
+    else
+      insert into public.comidas (nombre, descripcion, precio, stock, categoria_id, opciones)
+      values (r.base, r.descripcion, r.precio_simple, 20, v_cat, v_opc);
+    end if;
+  end loop;
+end;
+$$;
+
 insert into public.comidas (nombre, descripcion, precio, destacado, stock, categoria_id)
 select m.nombre, m.descripcion, m.precio, m.destacado, 20, c.id
 from (values
-  ('Burguers', 'Burguer Cheese doble', '2 medallones de carne y cheddar.', 11000, false),
-  ('Burguers', 'Burguer Cheese simple', '1 medallón de carne y cheddar.', 7500, false),
-  ('Burguers', 'Burguer Big Mac doble', '2 medallones de carne, salsa Big Mac, cheddar, pepinillos, lechuga y cebolla.', 11000, false),
-  ('Burguers', 'Burguer Big Mac simple', '1 medallón de carne, salsa Big Mac, cheddar, pepinillos, lechuga y cebolla.', 8500, false),
-  ('Burguers', 'Burguer Big Bang doble', '2 medallones de carne, salsa de la casa, cheddar, cebolla y bacon.', 11000, false),
-  ('Burguers', 'Burguer Big Bang simple', '1 medallón de carne, salsa de la casa, cheddar, cebolla y bacon.', 8500, false),
-  ('Burguers', 'Burguer Texas doble', '2 medallones de carne, cheddar, bacon, barbacoa y aros de cebolla.', 11000, false),
-  ('Burguers', 'Burguer Texas simple', '1 medallón de carne, cheddar, bacon, barbacoa y aros de cebolla.', 8500, false),
-  ('Burguers', 'Burguer Milwaukee doble', '2 medallones de carne, cheddar, bacon, cebolla crispy, lechuga, tomate y mayonesa.', 11000, false),
-  ('Burguers', 'Burguer Milwaukee simple', '1 medallón de carne, cheddar, bacon, cebolla crispy, lechuga, tomate y mayonesa.', 8500, false),
-  ('Burguers', 'Burguer Cuarto de Libra doble', '2 medallones de carne, cheddar, extra bacon y cebolla en cubos.', 11000, false),
-  ('Burguers', 'Burguer Cuarto de Libra simple', '1 medallón de carne, cheddar, extra bacon y cebolla en cubos.', 8500, false),
-  ('Burguers', 'Burguer Americana doble', '2 medallones de carne, cheddar, extra bacon, pepinillos, cebolla morada, ketchup y alioli.', 11000, false),
-  ('Burguers', 'Burguer Americana simple', '1 medallón de carne, cheddar, extra bacon, pepinillos, cebolla morada, ketchup y alioli.', 8500, false),
-  ('Burguers', 'Burguer Alabama doble', '2 medallones de carne, cheddar, pepinillos, cebolla crispy, lechuga, tomate y mayonesa.', 11000, false),
-  ('Burguers', 'Burguer Alabama simple', '1 medallón de carne, cheddar, pepinillos, cebolla crispy, lechuga, tomate y mayonesa.', 8500, false),
-  ('Burguers', 'Burguer CBH doble', '2 medallones de carne, cheddar, extra bacon, manteca y miel.', 11000, false),
-  ('Burguers', 'Burguer CBH simple', '1 medallón de carne, cheddar, extra bacon, manteca y miel.', 8500, false),
   ('Combos', 'Promo Cheese Simples', '3 burguers cheese simples con papas.', 17000, true),
   ('Combos', 'Promo Burritos Burguer', '2 burritos a elección (Texas o Milwaukee) con papas.', 16000, true),
   ('Pizzas', 'Pizza muzzarella clásica', null, 9000, false),

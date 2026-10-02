@@ -17,12 +17,13 @@ export default function CarritoProvider({ children }) {
   const valor = useMemo(
     () => ({
       items,
-      agregar: (id) => dispatch({ type: "agregar", id }),
-      restar: (id) => dispatch({ type: "restar", id }),
-      eliminar: (id) => dispatch({ type: "eliminar", id }),
+      agregar: (id, config = null, cantidad = 1) => dispatch({ type: "agregar", id, config, cantidad }),
+      restar: (clave) => dispatch({ type: "restar", clave }),
+      eliminar: (clave) => dispatch({ type: "eliminar", clave }),
       reemplazar: (nuevos) => dispatch({ type: "reemplazar", items: nuevos }),
       vaciar: () => dispatch({ type: "vaciar" }),
-      cantidadDe: (id) => items.find((i) => i.id === id)?.cantidad ?? 0,
+      // unidades de un producto sumando todas sus líneas (para el stock)
+      cantidadDe: (id) => items.filter((i) => i.id === id).reduce((acc, i) => acc + i.cantidad, 0),
     }),
     [items]
   );

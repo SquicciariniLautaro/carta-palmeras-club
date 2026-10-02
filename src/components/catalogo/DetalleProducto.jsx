@@ -1,12 +1,13 @@
 import Modal from "../ui/Modal";
 import { IconoWhatsApp } from "../ui/Iconos";
 import { STOCK_BAJO } from "../../config";
+import { tieneOpciones } from "../../lib/opciones";
 import ControlCantidad from "./ControlCantidad";
 import Precio from "./Precio";
 import { ImagenComida } from "./TarjetaProducto";
 
 // Modal con la descripción completa de una comida
-export default function DetalleProducto({ comida, categoria, cantidad, onCerrar, onAgregar, onSumar, onRestar, onConsultar }) {
+export default function DetalleProducto({ comida, categoria, cantidad, onCerrar, onAgregar, onSumar, onRestar, onPersonalizar, onConsultar }) {
   const agotado = comida ? comida.stock <= 0 : false;
   return (
     <Modal abierto={Boolean(comida)} onCerrar={onCerrar} titulo={comida?.nombre ?? ""}>
@@ -29,7 +30,11 @@ export default function DetalleProducto({ comida, categoria, cantidad, onCerrar,
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             {!agotado &&
-              (cantidad > 0 ? (
+              (comida && tieneOpciones(comida) ? (
+                <button type="button" className="boton-primario" onClick={onPersonalizar}>
+                  Armar mi pedido
+                </button>
+              ) : cantidad > 0 ? (
                 <ControlCantidad cantidad={cantidad} onSumar={onSumar} onRestar={onRestar} nombre={comida.nombre} />
               ) : (
                 <button type="button" className="boton-primario" onClick={onAgregar}>

@@ -1,13 +1,25 @@
+import { Link } from "react-router";
+import { useSesion } from "../../hooks/useSesion";
 import Logo from "../ui/Logo";
-import { IconoBolsa } from "../ui/Iconos";
+import { IconoBolsa, IconoCandado } from "../ui/Iconos";
 
 export default function Navbar({ cantidad, onAbrirCarrito }) {
+  const { esAdmin } = useSesion();
   return (
     <header className="sticky top-0 z-30 h-[72px] bg-fondo">
       <div className="mx-auto flex h-full max-w-6xl items-center justify-between gap-3 px-4">
         <a href="/" aria-label="Las Palmeras Club, inicio">
           <Logo className="h-12 w-auto" />
         </a>
+        <div className="flex items-center gap-2">
+        {esAdmin === true && (
+          <Link
+            to="/admin"
+            className="inline-flex items-center gap-1.5 rounded-full border border-borde bg-papel px-3 py-2 text-sm font-semibold text-tinta hover:bg-borde"
+          >
+            <IconoCandado className="size-4" /> Panel
+          </Link>
+        )}
         <button
           type="button"
           onClick={onAbrirCarrito}
@@ -20,6 +32,7 @@ export default function Navbar({ cantidad, onAbrirCarrito }) {
             {cantidad}
           </span>
         </button>
+        </div>
       </div>
     </header>
   );

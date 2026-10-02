@@ -5,6 +5,8 @@ import { supabase, mensajeDeError } from "../../lib/supabase";
 import { borrarImagen, comprimirImagen, subirImagen } from "../../lib/imagenes";
 import Modal from "../ui/Modal";
 import SubirImagen from "./SubirImagen";
+import { opcionesIniciales, validarOpciones } from "../../lib/opcionesForm";
+import OpcionesComida from "./OpcionesComida";
 
 function valoresIniciales(comida, categorias) {
   return {
@@ -16,6 +18,7 @@ function valoresIniciales(comida, categorias) {
     stock: comida?.stock != null ? String(comida.stock) : "0",
     destacado: comida?.destacado ?? false,
     activo: comida?.activo ?? true,
+    opciones: opcionesIniciales(comida),
   };
 }
 
@@ -32,11 +35,14 @@ function validar(v) {
   if (v.descripcion.length > 1000) errores.descripcion = "Máximo 1000 caracteres.";
   if (!v.categoria_id) errores.categoria_id = "Elegí una categoría.";
 
+  const conVariantes = v.opciones.variantes.length > 0;
   const precio = Number(v.precio);
-  if (v.precio === "" || !Number.isFinite(precio) || precio <= 0) errores.precio = "El precio tiene que ser mayor a 0.";
+  if (conVariantes) {
+    // el precio sale de las variantes: no se valida el campo
+  } else if (v.precio === "" || !Number.isFinite(precio) || precio <= 0) errores.precio = "El precio tiene que ser mayor a 0.";
   else if (precio > 9_999_999_999) errores.precio = "Precio demasiado alto.";
 
-  if (v.precio_promo !== "") {
+  if (!conVariantes && v.precio_promo !== "") {
     const promo = Number(v.precio_promo);
     if (!Number.isFinite(promo) || promo <= 0) errores.precio_promo = "Tiene que ser mayor a 0.";
     else if (!errores.precio && promo >= precio) errores.precio_promo = "Tiene que ser menor que el precio normal.";
@@ -44,6 +50,9 @@ function validar(v) {
 
   const stock = Number(v.stock);
   if (v.stock === "" || !Number.isInteger(stock) || stock < 0) errores.stock = "Número entero, 0 o más.";
+
+  const { errores: erroresOpciones } = validarOpciones(v.opciones);
+  if (Object.keys(erroresOpciones).length > 0) errores.opciones = erroresOpciones;
   return errores;
 }
 
@@ -81,12 +90,16 @@ export default function FormComida({ comida, categorias, onCerrar, onGuardado })
       }
 
       // 2. Guardar la fila
+      const { valor: opciones } = validarOpciones(v.opciones);
+      const variantes = opciones.variantes ?? [];
       const fila = {
         nombre: v.nombre.trim(),
         descripcion: v.descripcion.trim() || null,
         categoria_id: v.categoria_id,
-        precio: Number(v.precio),
-        precio_promo: v.precio_promo === "" ? null : Number(v.precio_promo),
+        // con variantes, el precio "desde" es el de la primera y no hay promo
+        precio: variantes.length > 0 ? variantes[0].precio : Number(v.precio),
+        precio_promo: variantes.length > 0 || v.precio_promo === "" ? null : Number(v.precio_promo),
+        opciones,
         stock: Number(v.stock),
         destacado: v.destacado,
         activo: v.activo,
@@ -188,8 +201,9 @@ export default function FormComida({ comida, categorias, onCerrar, onGuardado })
               min="0"
               step="0.01"
               className="campo"
-              value={v.precio}
+              value={v.opciones.variantes.length > 0 ? String(v.opciones.variantes[0].precio) : v.precio}
               onChange={cambiar("precio")}
+              disabled={v.opciones.variantes.length > 0}
             />
             <ErrorCampo mensaje={errores.precio} />
           </div>
@@ -207,10 +221,17 @@ export default function FormComida({ comida, categorias, onCerrar, onGuardado })
               value={v.precio_promo}
               onChange={cambiar("precio_promo")}
               placeholder="Vacío = sin promo"
+              disabled={v.opciones.variantes.length > 0}
             />
             <ErrorCampo mensaje={errores.precio_promo} />
           </div>
         </div>
+
+        <OpcionesComida
+          valor={v.opciones}
+          onCambio={(opciones) => setV((prev) => ({ ...prev, opciones }))}
+          errores={errores.opciones ?? {}}
+        />
 
         <div className="flex flex-wrap gap-6">
           <label className="flex items-center gap-2 text-sm">

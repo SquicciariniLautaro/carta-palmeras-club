@@ -1,5 +1,6 @@
 import { STOCK_BAJO } from "../../config";
 import { tienePromo } from "../../lib/formato";
+import { tieneOpciones } from "../../lib/opciones";
 import { IconoEstrella, IconoWhatsApp } from "../ui/Iconos";
 import ControlCantidad from "./ControlCantidad";
 import Precio from "./Precio";
@@ -21,7 +22,8 @@ export function ImagenComida({ comida, className = "" }) {
   );
 }
 
-export default function TarjetaProducto({ comida, cantidad, onAgregar, onSumar, onRestar, onVerDetalle, onConsultar }) {
+export default function TarjetaProducto({ comida, cantidad, onAgregar, onSumar, onRestar, onPersonalizar, onVerDetalle, onConsultar }) {
+  const conOpciones = tieneOpciones(comida);
   const agotado = comida.stock <= 0;
   const pocas = !agotado && comida.stock <= STOCK_BAJO;
 
@@ -64,6 +66,10 @@ export default function TarjetaProducto({ comida, cantidad, onAgregar, onSumar, 
         {agotado ? (
           <button type="button" onClick={onConsultar} className="boton-secundario w-full px-2 text-xs">
             <IconoWhatsApp className="size-4 text-whatsapp" /> Consultar
+          </button>
+        ) : conOpciones ? (
+          <button type="button" onClick={onPersonalizar} className="boton-primario w-full px-2">
+            {cantidad > 0 ? `Agregar otra (${cantidad})` : "Armar mi pedido"}
           </button>
         ) : cantidad > 0 ? (
           <ControlCantidad cantidad={cantidad} onSumar={onSumar} onRestar={onRestar} nombre={comida.nombre} chico />

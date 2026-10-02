@@ -27,7 +27,7 @@ export function notaParaRegistro({ nota, entrega, direccion }) {
 
 export function armarMensajePedido({ numero, items, total, cliente, nota, entrega, direccion }) {
   const lineas = items.map(
-    (i) => `*${i.cantidad}x* ${i.nombre} - ${formatearPrecio(i.subtotal)}`
+    (i) => `*${i.cantidad}x* ${i.nombre}${i.detalle ? ` (${i.detalle})` : ""} - ${formatearPrecio(i.subtotal)}`
   );
 
   const partes = [`¡Hola ${NEGOCIO.nombre}! Quiero hacer este pedido:`, ""];

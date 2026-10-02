@@ -1,6 +1,16 @@
 import { formatearPrecio, tienePromo } from "../../lib/formato";
+import { precioDesde } from "../../lib/opciones";
 
 export default function Precio({ comida, grande = false }) {
+  const desde = precioDesde(comida);
+  if (desde !== null) {
+    return (
+      <div className="flex flex-wrap items-baseline gap-x-1.5">
+        <span className="text-xs text-tinta-suave">Desde</span>
+        <span className={`font-bold ${grande ? "text-2xl" : "text-base"}`}>{formatearPrecio(desde)}</span>
+      </div>
+    );
+  }
   if (tienePromo(comida)) {
     return (
       <div className="flex flex-wrap items-baseline gap-x-2">

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { formatearPrecio, precioFinal } from "../../lib/formato";
+import { formatearPrecio } from "../../lib/formato";
 import { IconoBasura, IconoBolsa, IconoCerrar, IconoWhatsApp } from "../ui/Iconos";
 import { DIRECCION_VACIA, ENTREGA } from "../../lib/whatsapp";
 import ControlCantidad from "./ControlCantidad";
@@ -97,33 +97,34 @@ export default function Carrito({
           <form onSubmit={enviar} className="flex min-h-0 flex-1 flex-col">
             <div className="flex-1 space-y-3 overflow-y-auto p-4">
               <ul className="space-y-3">
-                {lineas.map(({ comida, cantidad }) => (
-                  <li key={comida.id} className="rounded-xl border border-borde bg-fondo/50 p-3">
+                {lineas.map((linea) => (
+                  <li key={linea.clave} className="rounded-xl border border-borde bg-fondo/50 p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold">{comida.nombre}</p>
+                        <p className="truncate text-sm font-semibold">{linea.comida.nombre}</p>
+                        {linea.texto && <p className="text-xs text-tinta">{linea.texto}</p>}
                         <p className="text-xs text-tinta-suave">
-                          {formatearPrecio(precioFinal(comida))} c/u ·{" "}
+                          {formatearPrecio(linea.precioUnitario)} c/u ·{" "}
                           <span className="font-semibold text-tinta">
-                            {formatearPrecio(precioFinal(comida) * cantidad)}
+                            {formatearPrecio(linea.precioUnitario * linea.cantidad)}
                           </span>
                         </p>
                       </div>
                       <button
                         type="button"
-                        onClick={() => onEliminar(comida)}
+                        onClick={() => onEliminar(linea)}
                         className="rounded-lg p-1.5 text-tinta-suave hover:bg-borde hover:text-brasa"
-                        aria-label={`Eliminar ${comida.nombre} del pedido`}
+                        aria-label={`Eliminar ${linea.comida.nombre} del pedido`}
                       >
                         <IconoBasura className="size-4" />
                       </button>
                     </div>
                     <div className="mt-2 w-32">
                       <ControlCantidad
-                        cantidad={cantidad}
-                        onSumar={() => onSumar(comida)}
-                        onRestar={() => onRestar(comida)}
-                        nombre={comida.nombre}
+                        cantidad={linea.cantidad}
+                        onSumar={() => onSumar(linea)}
+                        onRestar={() => onRestar(linea)}
+                        nombre={linea.comida.nombre}
                         chico
                       />
                     </div>

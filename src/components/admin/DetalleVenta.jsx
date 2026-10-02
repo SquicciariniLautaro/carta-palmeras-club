@@ -36,6 +36,7 @@ export default function DetalleVenta({ venta, onCerrar, onConfirmar, onCancelar,
                 <tr key={i.id} className="border-b border-borde/60">
                   <td className="py-2">
                     {i.nombre}
+                    {i.detalle && <span className="block text-xs text-tinta-suave">{i.detalle}</span>}
                     {!i.comida_id && <span className="ml-1 text-xs text-tinta-suave">(borrada)</span>}
                   </td>
                   <td className="py-2 text-right">{i.cantidad}</td>

@@ -100,7 +100,7 @@ export function ventasACsv(ventas) {
     v.numero,
     formatearFechaHora(v.created_at),
     v.cliente_nombre ?? "",
-    (v.venta_items ?? []).map((i) => `${i.cantidad}x ${i.nombre}`).join(", "),
+    (v.venta_items ?? []).map((i) => `${i.cantidad}x ${i.nombre}${i.detalle ? ` (${i.detalle})` : ""}`).join(", "),
     unidadesDeVenta(v),
     numero(v.total),
     ESTADOS[v.estado]?.nombre ?? v.estado,

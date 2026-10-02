@@ -110,6 +110,18 @@ Después de hacer cambios en el `.env`, cortá el servidor (Ctrl + C) y volvé a
 
 Si más adelante cambiás una variable, hay que hacer **Redeploy** en Vercel para que se aplique.
 
+## Opciones de las comidas (simple, doble, sin cebolla, extras)
+
+Cada comida puede tener opciones para que el cliente arme su pedido. Se cargan desde el panel: **Comidas → Editar → Opciones para el cliente**.
+
+- **Variantes:** tamaños o versiones con su precio (Simple, Doble, Triple…). Si hay variantes, el precio de la comida sale de ellas y en el catálogo aparece "Desde $X".
+- **Ingredientes que se pueden sacar:** separados por coma (Cebolla, Tomate…). Sacar un ingrediente no cambia el precio.
+- **Extras con costo:** cosas que se suman al precio (Huevo, Medallón extra…).
+
+El cliente además puede escribir una aclaración (por ejemplo "bien cocida"). Todo llega en el mensaje de WhatsApp y se ve en el detalle de cada venta del panel. El stock es por comida: una doble y una simple de la misma hamburguesa descuentan del mismo stock.
+
+**Si ya habías corrido `supabase/schema.sql` antes de esta versión**, volvé a correrlo completo en el SQL Editor: agrega las opciones y une las hamburguesas "doble" y "simple" en un solo producto (conserva la foto y el stock del doble). Se puede correr las veces que haga falta.
+
 ## Si algo no anda
 
 | Qué ves | Qué pasa | Cómo se arregla |

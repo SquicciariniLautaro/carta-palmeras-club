@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { LIMITES, NEGOCIO } from "../config";
 import { supabase, mensajeDeError, supabaseConfigurado } from "../lib/supabase";
-import { normalizarTexto, precioFinal, tienePromo } from "../lib/formato";
+import { normalizarTexto, tienePromo } from "../lib/formato";
+import { CONFIG_VACIA, claveLinea, itemParaPedido, precioLinea, textoConfig } from "../lib/opciones";
 import { armarMensajePedido, linkWhatsApp, mensajeConsulta, notaParaRegistro } from "../lib/whatsapp";
 import { revalidarCarrito, useCarrito } from "../hooks/useCarrito";
 import CarritoProvider from "../components/catalogo/CarritoProvider";
@@ -10,6 +11,7 @@ import Navbar from "../components/catalogo/Navbar";
 import Filtros from "../components/catalogo/Filtros";
 import TarjetaProducto, { TarjetaEsqueleto } from "../components/catalogo/TarjetaProducto";
 import DetalleProducto from "../components/catalogo/DetalleProducto";
+import PersonalizarProducto from "../components/catalogo/PersonalizarProducto";
 import Carrito from "../components/catalogo/Carrito";
 import BotonFlotante from "../components/catalogo/BotonFlotante";
 import Footer from "../components/catalogo/Footer";
@@ -22,7 +24,7 @@ async function obtenerCatalogo() {
     supabase.from("categorias").select("id, nombre, orden").order("orden").order("nombre"),
     supabase
       .from("comidas")
-      .select("id, nombre, descripcion, precio, precio_promo, categoria_id, imagen_url, destacado, stock")
+      .select("id, nombre, descripcion, precio, precio_promo, categoria_id, imagen_url, destacado, stock, opciones")
       .eq("activo", true),
   ]);
   if (cats.error) throw cats.error;
@@ -65,6 +67,7 @@ function CatalogoContenido() {
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState("todos");
   const [detalleId, setDetalleId] = useState(null);
+  const [personalizandoId, setPersonalizandoId] = useState(null);
   const [carritoAbierto, setCarritoAbierto] = useState(false);
   const [enviando, setEnviando] = useState(false);
 
@@ -146,42 +149,68 @@ function CatalogoContenido() {
   const lineas = useMemo(
     () =>
       itemsCarrito
-        .map((i) => ({ comida: comidasPorId.get(i.id), cantidad: i.cantidad }))
-        .filter((l) => l.comida),
+        .map((i) => {
+          const comida = comidasPorId.get(i.id);
+          if (!comida) return null;
+          return {
+            clave: i.clave,
+            comida,
+            config: i.config,
+            cantidad: i.cantidad,
+            texto: textoConfig(comida, i.config),
+            precioUnitario: precioLinea(comida, i.config),
+          };
+        })
+        .filter(Boolean),
     [itemsCarrito, comidasPorId]
   );
   const unidades = lineas.reduce((acc, l) => acc + l.cantidad, 0);
-  const total = lineas.reduce((acc, l) => acc + precioFinal(l.comida) * l.cantidad, 0);
+  const total = lineas.reduce((acc, l) => acc + l.precioUnitario * l.cantidad, 0);
 
-  function sumar(comida) {
+  // Agrega "cantidad" unidades de una comida con esa configuración, respetando stock y límites.
+  // Devuelve true si se agregó.
+  function sumar(comida, config = CONFIG_VACIA, cantidad = 1) {
     const actual = carrito.cantidadDe(comida.id);
-    if (actual >= comida.stock) {
-      toast.error(`No hay más stock de "${comida.nombre}" (quedan ${comida.stock}).`);
-      return;
+    if (actual + cantidad > comida.stock) {
+      toast.error(
+        comida.stock - actual <= 0
+          ? `No hay más stock de "${comida.nombre}" (quedan ${comida.stock}).`
+          : `Solo quedan ${comida.stock - actual} de "${comida.nombre}".`
+      );
+      return false;
     }
-    if (actual >= LIMITES.unidadesPorProducto) {
+    if (actual + cantidad > LIMITES.unidadesPorProducto) {
       toast.error(`Podés pedir hasta ${LIMITES.unidadesPorProducto} unidades de cada producto.`);
-      return;
+      return false;
     }
-    if (unidades >= LIMITES.unidadesPorPedido) {
+    if (unidades + cantidad > LIMITES.unidadesPorPedido) {
       toast.error(`El pedido puede tener hasta ${LIMITES.unidadesPorPedido} unidades.`);
-      return;
+      return false;
     }
-    if (actual === 0 && lineas.length >= LIMITES.productosDistintos) {
+    const esLineaNueva = !lineas.some((l) => l.clave === claveLinea(comida.id, config));
+    if (esLineaNueva && lineas.length >= LIMITES.productosDistintos) {
       toast.error(`El pedido puede tener hasta ${LIMITES.productosDistintos} productos distintos.`);
-      return;
+      return false;
     }
-    carrito.agregar(comida.id);
+    carrito.agregar(comida.id, config, cantidad);
     if (actual === 0) toast.success(`Agregaste ${comida.nombre}`, { id: `agregado-${comida.id}`, duration: 1500 });
+    return true;
   }
 
-  function restar(comida) {
-    carrito.restar(comida.id);
+  const sumarLinea = (linea) => sumar(linea.comida, linea.config);
+  const restarLinea = (linea) => carrito.restar(linea.clave);
+  const restarSimple = (comida) => carrito.restar(claveLinea(comida.id, CONFIG_VACIA));
+
+  function eliminar(linea) {
+    carrito.eliminar(linea.clave);
+    toast(`Sacaste ${linea.comida.nombre}`, { icon: "🗑️" });
   }
 
-  function eliminar(comida) {
-    carrito.eliminar(comida.id);
-    toast(`Sacaste ${comida.nombre}`, { icon: "🗑️" });
+  const personalizando = personalizandoId ? comidasPorId.get(personalizandoId) : null;
+
+  function abrirPersonalizar(comida) {
+    setDetalleId(null);
+    setPersonalizandoId(comida.id);
   }
 
   function consultar(comida) {
@@ -206,7 +235,7 @@ function CatalogoContenido() {
 
     setEnviando(true);
     const { data, error } = await supabase.rpc("crear_pedido", {
-      items: lineas.map((l) => ({ comida_id: l.comida.id, cantidad: l.cantidad })),
+      items: lineas.map((l) => itemParaPedido(l.comida.id, l.cantidad, l.config)),
       cliente_nombre: cliente || null,
       nota: notaParaRegistro({ nota, entrega, direccion }) || null,
     });
@@ -314,7 +343,8 @@ function CatalogoContenido() {
                     cantidad={carrito.cantidadDe(comida.id)}
                     onAgregar={() => sumar(comida)}
                     onSumar={() => sumar(comida)}
-                    onRestar={() => restar(comida)}
+                    onRestar={() => restarSimple(comida)}
+                    onPersonalizar={() => abrirPersonalizar(comida)}
                     onVerDetalle={() => setDetalleId(comida.id)}
                     onConsultar={() => consultar(comida)}
                   />
@@ -334,8 +364,18 @@ function CatalogoContenido() {
         onCerrar={() => setDetalleId(null)}
         onAgregar={() => detalle && sumar(detalle)}
         onSumar={() => detalle && sumar(detalle)}
-        onRestar={() => detalle && restar(detalle)}
+        onRestar={() => detalle && restarSimple(detalle)}
+        onPersonalizar={() => detalle && abrirPersonalizar(detalle)}
         onConsultar={() => consultar(detalle)}
+      />
+
+      <PersonalizarProducto
+        comida={personalizando}
+        restantes={personalizando ? Math.max(1, personalizando.stock - carrito.cantidadDe(personalizando.id)) : 1}
+        onCerrar={() => setPersonalizandoId(null)}
+        onAgregar={(config, cantidad) => {
+          if (personalizando && sumar(personalizando, config, cantidad)) setPersonalizandoId(null);
+        }}
       />
 
       <Carrito
@@ -343,8 +383,8 @@ function CatalogoContenido() {
         onCerrar={cerrarCarrito}
         lineas={lineas}
         total={total}
-        onSumar={sumar}
-        onRestar={restar}
+        onSumar={sumarLinea}
+        onRestar={restarLinea}
         onEliminar={eliminar}
         onVaciar={() => {
           carrito.vaciar();
