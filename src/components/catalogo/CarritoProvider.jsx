@@ -22,7 +22,7 @@ export default function CarritoProvider({ children }) {
       eliminar: (clave) => dispatch({ type: "eliminar", clave }),
       reemplazar: (nuevos) => dispatch({ type: "reemplazar", items: nuevos }),
       vaciar: () => dispatch({ type: "vaciar" }),
-      // unidades de un producto sumando todas sus líneas (para el stock)
+      // unidades de un producto sumando todas sus líneas (para los límites)
       cantidadDe: (id) => items.filter((i) => i.id === id).reduce((acc, i) => acc + i.cantidad, 0),
     }),
     [items]

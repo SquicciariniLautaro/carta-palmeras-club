@@ -15,12 +15,12 @@ export const LIMITES = {
   productosDistintos: 30,
 };
 
-// Desde cuántas unidades se muestra "Quedan N"
-export const STOCK_BAJO = 5;
-
-// Imágenes de comidas
+// Imágenes de comidas: se suben a Cloudinary (en WebP) a través de la
+// función /api/cloudinary. El bucket de Supabase queda solo para borrar
+// las fotos que se subieron antes del cambio.
 export const IMAGENES = {
-  bucket: "comidas",
+  api: "/api/cloudinary",
+  bucketAnterior: "comidas",
   tamanoMaximo: 2 * 1024 * 1024, // 2 MB
   tipos: ["image/jpeg", "image/png", "image/webp"],
   ladoMaximo: 1200, // px

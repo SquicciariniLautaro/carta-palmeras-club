@@ -2,7 +2,7 @@ import { createContext, useContext } from "react";
 
 import { claveLinea, configValida, normalizarConfig } from "../lib/opciones";
 
-// El carrito guarda solo { id, cantidad, config }. Nombre, precio y stock se
+// El carrito guarda solo { id, cantidad, config }. Nombre y precio se
 // leen siempre de las comidas cargadas desde Supabase, así nunca quedan viejos.
 // Cada combinación distinta de opciones (por ejemplo una doble sin cebolla) es
 // una línea aparte, identificada por su "clave".
@@ -64,12 +64,10 @@ export function carritoReducer(items, accion) {
 }
 
 // Compara el carrito guardado con las comidas actuales: saca lo que ya no
-// existe, está agotado o cambió de opciones, y ajusta cantidades al stock
-// (el stock es por producto: cuenta todas sus líneas juntas).
+// existe o cambió de opciones.
 export function revalidarCarrito(items, comidasPorId) {
   const cambios = [];
   const nuevos = [];
-  const usado = new Map();
   for (const item of items) {
     const comida = comidasPorId.get(item.id);
     if (!comida) {
@@ -80,22 +78,6 @@ export function revalidarCarrito(items, comidasPorId) {
       cambios.push(`Cambiaron las opciones de "${comida.nombre}" y lo sacamos de tu pedido.`);
       continue;
     }
-    if (comida.stock <= 0) {
-      cambios.push(`"${comida.nombre}" se agotó y lo sacamos de tu pedido.`);
-      continue;
-    }
-    const restante = comida.stock - (usado.get(item.id) ?? 0);
-    if (restante <= 0) {
-      cambios.push(`De "${comida.nombre}" quedan ${comida.stock}: sacamos una línea de tu pedido.`);
-      continue;
-    }
-    if (item.cantidad > restante) {
-      cambios.push(`De "${comida.nombre}" quedan ${comida.stock}: ajustamos la cantidad.`);
-      nuevos.push({ ...item, cantidad: restante });
-      usado.set(item.id, comida.stock);
-      continue;
-    }
-    usado.set(item.id, (usado.get(item.id) ?? 0) + item.cantidad);
     nuevos.push(item);
   }
   return { items: nuevos, cambios };

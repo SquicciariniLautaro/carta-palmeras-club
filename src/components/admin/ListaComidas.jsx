@@ -1,82 +1,12 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { supabase, mensajeDeError } from "../../lib/supabase";
-import { borrarImagen } from "../../lib/imagenes";
+import { borrarImagen, urlImagen } from "../../lib/imagenes";
 import { formatearPrecio, normalizarTexto } from "../../lib/formato";
-import { IconoBasura, IconoBuscar, IconoEditar, IconoEstrella, IconoMas, IconoMenos } from "../ui/Iconos";
+import { IconoBasura, IconoBuscar, IconoEditar, IconoEstrella, IconoMas } from "../ui/Iconos";
 import Cargando from "../ui/Cargando";
 import Confirmar from "../ui/Confirmar";
 import FormComida from "./FormComida";
-
-// Control rápido de stock: – [campo] +
-function EditorStock({ comida, onGuardar }) {
-  const [valor, setValor] = useState(String(comida.stock));
-  const [stockOriginal, setStockOriginal] = useState(comida.stock);
-
-  // Si el stock cambia desde afuera (ej. una venta confirmada), actualizamos el campo
-  if (comida.stock !== stockOriginal) {
-    setStockOriginal(comida.stock);
-    setValor(String(comida.stock));
-  }
-
-  // Los botones – y + solo cambian el número en pantalla; el guardado (y el
-  // aviso) ocurre una vez, cuando el dueño deja de tocar.
-  const temporizador = useRef(null);
-
-  function cambiarCon(delta) {
-    const actual = Number(valor);
-    const base = Number.isInteger(actual) && actual >= 0 ? actual : comida.stock;
-    const nuevo = Math.max(0, base + delta);
-    setValor(String(nuevo));
-    clearTimeout(temporizador.current);
-    temporizador.current = setTimeout(() => confirmar(nuevo), 900);
-  }
-
-  function confirmar(nuevo) {
-    clearTimeout(temporizador.current);
-    const n = Number(nuevo);
-    if (!Number.isInteger(n) || n < 0) {
-      toast.error("El stock tiene que ser un número entero mayor o igual a 0.");
-      setValor(String(comida.stock));
-      return;
-    }
-    if (n !== comida.stock) onGuardar(n);
-  }
-
-  return (
-    <div className="flex items-center gap-1">
-      <button
-        type="button"
-        className="grid size-8 place-items-center rounded-lg bg-borde hover:bg-brasa hover:text-fondo disabled:opacity-40"
-        onClick={() => cambiarCon(-1)}
-        disabled={Number(valor) <= 0}
-        aria-label={`Restar stock de ${comida.nombre}`}
-      >
-        <IconoMenos className="size-4" />
-      </button>
-      <input
-        type="number"
-        inputMode="numeric"
-        min="0"
-        step="1"
-        value={valor}
-        onChange={(e) => setValor(e.target.value)}
-        onBlur={() => confirmar(valor)}
-        onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-        className="campo w-16 px-2 py-1.5 text-center"
-        aria-label={`Stock de ${comida.nombre}`}
-      />
-      <button
-        type="button"
-        className="grid size-8 place-items-center rounded-lg bg-palmera text-fondo hover:bg-palmera-oscuro"
-        onClick={() => cambiarCon(1)}
-        aria-label={`Sumar stock de ${comida.nombre}`}
-      >
-        <IconoMas className="size-4" />
-      </button>
-    </div>
-  );
-}
 
 function Interruptor({ activo, onCambiar, etiqueta }) {
   return (
@@ -132,7 +62,7 @@ export default function ListaComidas({ comidas, categorias, cargando, onCambio }
       toast.error(mensajeDeError(error, "No se pudo borrar la comida."));
       return;
     }
-    await borrarImagen(aBorrar.imagen_path);
+    await borrarImagen(aBorrar.imagen_url, aBorrar.imagen_path);
     toast.success(`Borraste "${aBorrar.nombre}"`);
     setABorrar(null);
     onCambio();
@@ -191,12 +121,17 @@ export default function ListaComidas({ comidas, categorias, cargando, onCambio }
           {filtradas.map((c) => (
             <li
               key={c.id}
-              className={`tarjeta grid grid-cols-[56px_1fr] items-center gap-x-3 gap-y-3 p-3 lg:grid-cols-[56px_minmax(0,1fr)_140px_140px_120px_90px_auto] ${
+              className={`tarjeta grid grid-cols-[56px_1fr] items-center gap-x-3 gap-y-3 p-3 lg:grid-cols-[56px_minmax(0,1fr)_160px_120px_90px_auto] ${
                 c.activo ? "" : "opacity-60"
               }`}
             >
               {c.imagen_url ? (
-                <img src={c.imagen_url} alt={c.nombre} className="size-14 rounded-lg object-cover" loading="lazy" />
+                <img
+                  src={urlImagen(c.imagen_url, { ancho: 112, proporcion: "1:1" })}
+                  alt={c.nombre}
+                  className="size-14 rounded-lg object-cover object-center"
+                  loading="lazy"
+                />
               ) : (
                 <div className="grid size-14 place-items-center rounded-lg bg-borde text-center text-[10px] text-tinta-suave">
                   Sin imagen
@@ -218,14 +153,6 @@ export default function ListaComidas({ comidas, categorias, cargando, onCambio }
                 {c.precio_promo && (
                   <span className="ml-2 font-semibold text-brasa">{formatearPrecio(c.precio_promo)}</span>
                 )}
-              </div>
-
-              <div className="col-span-2 flex items-center gap-2 lg:col-span-1">
-                <span className="text-xs text-tinta-suave lg:hidden">Stock</span>
-                <EditorStock
-                  comida={c}
-                  onGuardar={(n) => actualizar(c, { stock: n }, `Stock de "${c.nombre}": ${n}`)}
-                />
               </div>
 
               <label className="flex items-center gap-2 text-xs text-tinta-suave">
@@ -283,7 +210,7 @@ export default function ListaComidas({ comidas, categorias, cargando, onCambio }
       <Confirmar
         abierto={Boolean(aBorrar)}
         titulo="Borrar comida"
-        mensaje={`¿Seguro que querés borrar "${aBorrar?.nombre ?? ""}"? También se borra su imagen. Las ventas anteriores se conservan. Si solo querés ocultarla, desactivala.`}
+        mensaje={`¿Seguro que querés borrar "${aBorrar?.nombre ?? ""}"? También se borra su imagen. Las ventas anteriores se conservan. Si solo querés ocultarla (por ejemplo, si hoy no hay), desactivala.`}
         textoConfirmar="Borrar"
         procesando={borrando}
         onConfirmar={borrar}

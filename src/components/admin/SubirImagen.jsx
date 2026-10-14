@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { validarImagen } from "../../lib/imagenes";
+import { urlImagen, validarImagen } from "../../lib/imagenes";
 import { IconoImagen, IconoSubir } from "../ui/Iconos";
 
 // Selector de imagen con arrastrar y soltar + vista previa.
@@ -34,7 +34,7 @@ export default function SubirImagen({ urlActual, archivo, onArchivo, onQuitar, e
     onQuitar();
   }
 
-  const src = archivo ? vistaPrevia : urlActual;
+  const src = archivo ? vistaPrevia : urlImagen(urlActual, { ancho: 200, proporcion: "1:1" });
 
   return (
     <div>
@@ -55,7 +55,7 @@ export default function SubirImagen({ urlActual, archivo, onArchivo, onQuitar, e
         }`}
       >
         {src ? (
-          <img src={src} alt="Vista previa" className="size-24 shrink-0 rounded-lg object-cover" />
+          <img src={src} alt="Vista previa" className="size-24 shrink-0 rounded-lg object-cover object-center" />
         ) : (
           <div className="grid size-24 shrink-0 place-items-center rounded-lg bg-borde text-tinta-suave">
             <IconoImagen className="size-8" />
@@ -63,7 +63,8 @@ export default function SubirImagen({ urlActual, archivo, onArchivo, onQuitar, e
         )}
         <div className="space-y-2">
           <p className="text-xs text-tinta-suave">
-            Arrastrá una imagen o elegila. JPG, PNG o WebP. Se achica a 1200 px y se comprime antes de subir (máx. 2 MB).
+            Arrastrá una imagen o elegila (JPG, PNG o WebP). Se achica a 1200 px, se convierte a WebP y se guarda en
+            Cloudinary. En la carta se muestra centrada en la comida.
           </p>
           <div className="flex flex-wrap justify-center gap-2 sm:justify-start">
             <button type="button" className="boton-secundario px-3 py-2 text-xs" onClick={() => inputRef.current?.click()}>

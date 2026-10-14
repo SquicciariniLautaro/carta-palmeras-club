@@ -92,6 +92,23 @@ export const IconoActualizar = (p) => (
     <path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" />
   </Svg>
 );
+export const IconoCheck = (p) => (
+  <Svg {...p}>
+    <path d="M5 12.5l4.5 4.5L19 7.5" />
+  </Svg>
+);
+export const IconoReloj = (p) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M12 7.5V12l3 2" />
+  </Svg>
+);
+export const IconoOjo = (p) => (
+  <Svg {...p}>
+    <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+    <circle cx="12" cy="12" r="2.5" />
+  </Svg>
+);
 export const IconoCandado = (p) => (
   <Svg {...p}>
     <rect x="5" y="11" width="14" height="9" rx="2" />

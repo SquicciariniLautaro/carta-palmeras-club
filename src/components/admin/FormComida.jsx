@@ -15,7 +15,6 @@ function valoresIniciales(comida, categorias) {
     categoria_id: comida?.categoria_id ?? categorias[0]?.id ?? "",
     precio: comida?.precio != null ? String(Number(comida.precio)) : "",
     precio_promo: comida?.precio_promo != null ? String(Number(comida.precio_promo)) : "",
-    stock: comida?.stock != null ? String(comida.stock) : "0",
     destacado: comida?.destacado ?? false,
     activo: comida?.activo ?? true,
     opciones: opcionesIniciales(comida),
@@ -48,10 +47,7 @@ function validar(v) {
     else if (!errores.precio && promo >= precio) errores.precio_promo = "Tiene que ser menor que el precio normal.";
   }
 
-  const stock = Number(v.stock);
-  if (v.stock === "" || !Number.isInteger(stock) || stock < 0) errores.stock = "Número entero, 0 o más.";
-
-  const { errores: erroresOpciones } = validarOpciones(v.opciones);
+  const { errores: erroresOpciones } = validarOpciones(v.opciones, v.descripcion);
   if (Object.keys(erroresOpciones).length > 0) errores.opciones = erroresOpciones;
   return errores;
 }
@@ -80,7 +76,7 @@ export default function FormComida({ comida, categorias, onCerrar, onGuardado })
     setGuardando(true);
     let nuevaImagen = null;
     try {
-      // 1. Subir la imagen nueva (si hay)
+      // 1. Subir la imagen nueva (si hay) a Cloudinary, en WebP
       if (archivo) {
         const comprimida = await comprimirImagen(archivo);
         if (comprimida.size > IMAGENES.tamanoMaximo) {
@@ -90,7 +86,7 @@ export default function FormComida({ comida, categorias, onCerrar, onGuardado })
       }
 
       // 2. Guardar la fila
-      const { valor: opciones } = validarOpciones(v.opciones);
+      const { valor: opciones } = validarOpciones(v.opciones, v.descripcion);
       const variantes = opciones.variantes ?? [];
       const fila = {
         nombre: v.nombre.trim(),
@@ -100,7 +96,6 @@ export default function FormComida({ comida, categorias, onCerrar, onGuardado })
         precio: variantes.length > 0 ? variantes[0].precio : Number(v.precio),
         precio_promo: variantes.length > 0 || v.precio_promo === "" ? null : Number(v.precio_promo),
         opciones,
-        stock: Number(v.stock),
         destacado: v.destacado,
         activo: v.activo,
       };
@@ -117,16 +112,16 @@ export default function FormComida({ comida, categorias, onCerrar, onGuardado })
         : await supabase.from("comidas").insert(fila);
       if (error) throw error;
 
-      // 3. Si se reemplazó o quitó la imagen, borrar la vieja del bucket
+      // 3. Si se reemplazó o quitó la imagen, borrar la vieja
       if (comida?.imagen_path && (nuevaImagen || quitarImagen)) {
-        await borrarImagen(comida.imagen_path);
+        await borrarImagen(comida.imagen_url, comida.imagen_path);
       }
 
       toast.success(comida ? "Cambios guardados" : "Comida creada");
       onGuardado();
     } catch (error) {
       // Si la fila no se guardó, no dejamos la imagen nueva huérfana
-      if (nuevaImagen) await borrarImagen(nuevaImagen.path);
+      if (nuevaImagen) await borrarImagen(nuevaImagen.url, nuevaImagen.path);
       toast.error(mensajeDeError(error, "No se pudo guardar. Revisá los datos y la imagen."));
     } finally {
       setGuardando(false);
@@ -155,13 +150,16 @@ export default function FormComida({ comida, categorias, onCerrar, onGuardado })
             value={v.descripcion}
             onChange={cambiar("descripcion")}
             maxLength={1000}
-            placeholder="Ingredientes, tamaño, etc."
+            placeholder="Ingredientes separados por coma. Ej.: Medallón de carne, cheddar, lechuga y tomate."
           />
+          <p className="mt-1 text-xs text-tinta-suave">
+            Los ingredientes que escribas acá aparecen solos abajo, en "Ingredientes que se pueden sacar".
+          </p>
           <ErrorCampo mensaje={errores.descripcion} />
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <div>
+          <div className="sm:col-span-2">
             <label htmlFor="f-cat" className="etiqueta">
               Categoría *
             </label>
@@ -173,22 +171,6 @@ export default function FormComida({ comida, categorias, onCerrar, onGuardado })
               ))}
             </select>
             <ErrorCampo mensaje={errores.categoria_id} />
-          </div>
-          <div>
-            <label htmlFor="f-stock" className="etiqueta">
-              Stock *
-            </label>
-            <input
-              id="f-stock"
-              type="number"
-              inputMode="numeric"
-              min="0"
-              step="1"
-              className="campo"
-              value={v.stock}
-              onChange={cambiar("stock")}
-            />
-            <ErrorCampo mensaje={errores.stock} />
           </div>
           <div>
             <label htmlFor="f-precio" className="etiqueta">
@@ -229,6 +211,7 @@ export default function FormComida({ comida, categorias, onCerrar, onGuardado })
 
         <OpcionesComida
           valor={v.opciones}
+          descripcion={v.descripcion}
           onCambio={(opciones) => setV((prev) => ({ ...prev, opciones }))}
           errores={errores.opciones ?? {}}
         />

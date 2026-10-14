@@ -29,11 +29,11 @@ create table if not exists public.comidas (
   imagen_path  text,          -- ruta dentro del bucket "comidas", para poder borrarla
   destacado    boolean not null default false,
   activo       boolean not null default true,
-  stock        int not null default 0 check (stock >= 0),
   -- Opciones para personalizar el pedido (todas opcionales):
   --   variantes: [{ "nombre": "Simple", "precio": 8500 }, ...]  (si hay, el precio sale de acá)
   --   quitar:    ["Cebolla", "Tomate"]                          (ingredientes que se pueden sacar)
   --   agregar:   [{ "nombre": "Huevo", "precio": 1000 }, ...]   (extras con costo)
+  --   pregunta:  "¿Para cuántas personas?"                     (título de las variantes en la carta)
   opciones     jsonb not null default '{}'::jsonb check (jsonb_typeof(opciones) = 'object'),
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now()
@@ -43,18 +43,31 @@ create table if not exists public.comidas (
 alter table public.comidas
   add column if not exists opciones jsonb not null default '{}'::jsonb;
 
+-- El local no maneja stock: se quita la columna de versiones anteriores.
+-- Para ocultar una comida que no hay, se desactiva desde el panel.
+alter table public.comidas drop column if exists stock;
+
 create index if not exists comidas_categoria_idx on public.comidas (categoria_id);
 
 create table if not exists public.ventas (
   id             uuid primary key default gen_random_uuid(),
   numero         bigint generated always as identity unique,  -- número de pedido legible
   created_at     timestamptz not null default now(),
-  estado         text not null default 'pendiente' check (estado in ('pendiente', 'confirmada', 'cancelada')),
+  -- pendiente → en_preparacion → enviado → entregado → cerrado (o cancelado)
+  estado         text not null default 'pendiente',
   total          numeric(12,2) not null default 0 check (total >= 0),
   cliente_nombre text check (cliente_nombre is null or length(cliente_nombre) <= 80),
   nota           text check (nota is null or length(nota) <= 300),
   origen         text not null default 'web' check (origen in ('web', 'manual'))
 );
+
+-- Estados del pedido. Las bases anteriores usaban confirmada/cancelada:
+-- se pasan a cerrado/cancelado antes de poner la regla nueva.
+alter table public.ventas drop constraint if exists ventas_estado_check;
+update public.ventas set estado = 'cerrado'   where estado = 'confirmada';
+update public.ventas set estado = 'cancelado' where estado = 'cancelada';
+alter table public.ventas add constraint ventas_estado_check
+  check (estado in ('pendiente', 'en_preparacion', 'enviado', 'entregado', 'cerrado', 'cancelado'));
 
 create index if not exists ventas_created_at_idx on public.ventas (created_at desc);
 create index if not exists ventas_estado_idx on public.ventas (estado);
@@ -78,6 +91,23 @@ create index if not exists venta_items_comida_idx on public.venta_items (comida_
 create table if not exists public.admins (
   user_id uuid primary key references auth.users (id) on delete cascade
 );
+
+-- Horario de atención: un turno por día (0 = domingo … 6 = sábado), en hora
+-- de Argentina. Fuera de horario la carta no deja mandar pedidos.
+--   desde < hasta  → turno normal (ej. 11:00 a 15:00)
+--   desde > hasta  → cruza la medianoche (ej. 20:00 a 01:00)
+--   desde = hasta  → abierto todo el día
+-- Arranca con todos los días "todo el día": cargá el horario real desde el panel.
+create table if not exists public.horarios (
+  dia     smallint primary key check (dia between 0 and 6),
+  abierto boolean not null default true,
+  desde   time not null default '00:00',
+  hasta   time not null default '00:00'
+);
+
+insert into public.horarios (dia)
+select d from generate_series(0, 6) as d
+on conflict (dia) do nothing;
 
 -- ---------------------------------------------------------------------
 -- 2. Trigger de updated_at
@@ -114,34 +144,75 @@ as $$
   select exists (select 1 from public.admins where user_id = auth.uid());
 $$;
 
+-- ¿El local está abierto en este momento? (según la tabla horarios)
+create or replace function public.local_abierto(p_momento timestamptz default now())
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_local timestamp := p_momento at time zone 'America/Argentina/Buenos_Aires';
+  v_dia   int  := extract(dow from v_local)::int;
+  v_hora  time := v_local::time;
+  h       public.horarios%rowtype;
+begin
+  -- Sin horarios cargados: siempre abierto
+  if not exists (select 1 from public.horarios) then
+    return true;
+  end if;
+
+  -- Turno de hoy
+  select * into h from public.horarios where dia = v_dia;
+  if found and h.abierto then
+    if h.desde = h.hasta then
+      return true;                                         -- todo el día
+    elsif h.desde < h.hasta and v_hora >= h.desde and v_hora < h.hasta then
+      return true;
+    elsif h.desde > h.hasta and v_hora >= h.desde then
+      return true;                                         -- turno que sigue después de las 00
+    end if;
+  end if;
+
+  -- Lo que queda del turno de ayer, si cruzó la medianoche
+  select * into h from public.horarios where dia = (v_dia + 6) % 7;
+  if found and h.abierto and h.desde > h.hasta and v_hora < h.hasta then
+    return true;
+  end if;
+
+  return false;
+end;
+$$;
+
 -- ---------------------------------------------------------------------
 -- 4. Funciones internas (no se pueden llamar desde el cliente)
 -- ---------------------------------------------------------------------
 
--- Crea una venta con sus ítems tomando los precios de la base.
+-- Funciones de versiones anteriores (manejaban stock o cambiaron de firma)
+drop function if exists public.confirmar_venta(uuid);
+drop function if exists public.cancelar_venta(uuid);
+drop function if exists public._descontar_stock(uuid);
+drop function if exists public._devolver_stock(uuid);
+drop function if exists public._crear_venta(jsonb, text, text, text, boolean);
+
+-- Agrega ítems a una venta tomando los precios de la base.
 -- p_items: [{ "comida_id": "<uuid>", "cantidad": 2,
 --             "variante": "Doble", "quitar": ["Cebolla"], "agregar": ["Huevo"],
 --             "aclaracion": "bien cocida" }, ...]
 -- Solo comida_id y cantidad son obligatorios. Cada combinación distinta
 -- (por ejemplo una doble sin cebolla) es una línea aparte.
-create or replace function public._crear_venta(
+create or replace function public._agregar_items(
+  p_venta_id uuid,
   p_items jsonb,
-  p_cliente_nombre text,
-  p_nota text,
-  p_origen text,
   p_solo_activas boolean
 )
-returns uuid
+returns void
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
-  v_venta_id uuid;
-  v_total    numeric(12,2) := 0;
-  v_unidades int := 0;
-  v_cliente  text := nullif(btrim(coalesce(p_cliente_nombre, '')), '');
-  v_nota     text := nullif(btrim(coalesce(p_nota, '')), '');
   r          record;
   c          public.comidas%rowtype;
   v_precio   numeric(12,2);
@@ -152,22 +223,12 @@ declare
   v_agregar  text[];
   v_partes   text[];
 begin
-  if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then
-    raise exception 'El pedido está vacío.';
+  if p_items is null or jsonb_typeof(p_items) <> 'array' then
+    raise exception 'El formato del pedido no es válido.';
   end if;
   if jsonb_array_length(p_items) > 30 then
     raise exception 'El pedido tiene demasiados productos (máximo 30 distintos).';
   end if;
-  if v_cliente is not null and length(v_cliente) > 80 then
-    raise exception 'El nombre es demasiado largo (máximo 80 caracteres).';
-  end if;
-  if v_nota is not null and length(v_nota) > 300 then
-    raise exception 'La nota es demasiado larga (máximo 300 caracteres).';
-  end if;
-
-  insert into public.ventas (estado, total, cliente_nombre, nota, origen)
-  values ('pendiente', 0, v_cliente, v_nota, p_origen)
-  returning id into v_venta_id;
 
   begin
     for r in
@@ -208,6 +269,7 @@ begin
         if r.variante is null then
           v_var := (c.opciones -> 'variantes') -> 0;
         else
+          v_var := null;
           select e into v_var
             from jsonb_array_elements(c.opciones -> 'variantes') e
            where e ->> 'nombre' = r.variante
@@ -235,6 +297,7 @@ begin
 
       -- Extras (suman al precio)
       for v_texto in select distinct jsonb_array_elements_text(r.agregar) loop
+        v_extra := null;
         select e into v_extra
           from jsonb_array_elements(coalesce(c.opciones -> 'agregar', '[]'::jsonb)) e
          where e ->> 'nombre' = v_texto
@@ -255,104 +318,101 @@ begin
         v_partes := v_partes || ('"' || r.aclaracion || '"');
       end if;
 
-      v_unidades := v_unidades + r.cantidad;
-      v_total    := v_total + v_precio * r.cantidad;
-
       insert into public.venta_items (venta_id, comida_id, nombre, detalle, precio_unitario, cantidad, subtotal)
-      values (v_venta_id, c.id, c.nombre, nullif(array_to_string(v_partes, ' · '), ''),
+      values (p_venta_id, c.id, c.nombre, nullif(array_to_string(v_partes, ' · '), ''),
               v_precio, r.cantidad, v_precio * r.cantidad);
-    end loop;
-
-    -- Stock y tope por producto, sumando todas sus líneas
-    for r in
-      select vi.comida_id, sum(vi.cantidad)::int as cantidad
-      from public.venta_items vi
-      where vi.venta_id = v_venta_id
-      group by vi.comida_id
-    loop
-      select * into c from public.comidas where id = r.comida_id;
-      if r.cantidad > 50 then
-        raise exception 'Se pueden pedir hasta 50 unidades de cada producto.';
-      end if;
-      if c.stock < r.cantidad then
-        if c.stock = 0 then
-          raise exception '"%" está agotado.', c.nombre;
-        end if;
-        raise exception 'No hay stock suficiente de "%": quedan %.', c.nombre, c.stock;
-      end if;
     end loop;
   exception
     when invalid_text_representation or numeric_value_out_of_range then
       raise exception 'El formato del pedido no es válido.';
   end;
-
-  if v_unidades > 100 then
-    raise exception 'El pedido supera el máximo de 100 unidades.';
-  end if;
-
-  update public.ventas set total = v_total where id = v_venta_id;
-  return v_venta_id;
 end;
 $$;
 
--- Descuenta el stock de todos los ítems de una venta. Falla (y deshace
--- todo) si algún producto no alcanza.
-create or replace function public._descontar_stock(p_venta_id uuid)
+-- Controla los límites del pedido y recalcula el total con sus ítems.
+create or replace function public._recalcular_venta(p_venta_id uuid)
 returns void
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
-  r       record;
-  v_stock int;
+  v_lineas   int;
+  v_unidades int;
+  v_total    numeric(12,2);
 begin
-  for r in
-    select vi.comida_id, sum(vi.cantidad)::int as cantidad, max(vi.nombre) as nombre
-    from public.venta_items vi
-    where vi.venta_id = p_venta_id and vi.comida_id is not null
-    group by vi.comida_id
-    order by vi.comida_id            -- orden fijo para evitar bloqueos cruzados
-  loop
-    update public.comidas
-       set stock = stock - r.cantidad
-     where id = r.comida_id and stock >= r.cantidad;
+  select count(*), coalesce(sum(cantidad), 0), coalesce(sum(subtotal), 0)
+    into v_lineas, v_unidades, v_total
+    from public.venta_items
+   where venta_id = p_venta_id;
 
-    if not found then
-      select stock into v_stock from public.comidas where id = r.comida_id;
-      raise exception 'No hay stock suficiente de "%": quedan % y la venta lleva %.',
-        r.nombre, coalesce(v_stock, 0), r.cantidad;
-    end if;
-  end loop;
+  if v_lineas = 0 then
+    raise exception 'El pedido está vacío.';
+  end if;
+  if v_lineas > 30 then
+    raise exception 'El pedido tiene demasiados productos (máximo 30 distintos).';
+  end if;
+  if v_unidades > 100 then
+    raise exception 'El pedido supera el máximo de 100 unidades.';
+  end if;
+  if exists (select 1 from public.venta_items
+              where venta_id = p_venta_id
+              group by comida_id
+             having sum(cantidad) > 50) then
+    raise exception 'Se pueden pedir hasta 50 unidades de cada producto.';
+  end if;
+
+  update public.ventas set total = v_total where id = p_venta_id;
 end;
 $$;
 
--- Devuelve al stock lo que se había descontado (al cancelar una confirmada).
-create or replace function public._devolver_stock(p_venta_id uuid)
-returns void
+-- Crea una venta con sus ítems y devuelve su id.
+create or replace function public._crear_venta(
+  p_items jsonb,
+  p_cliente_nombre text,
+  p_nota text,
+  p_origen text,
+  p_solo_activas boolean,
+  p_estado text
+)
+returns uuid
 language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_venta_id uuid;
+  v_cliente  text := nullif(btrim(coalesce(p_cliente_nombre, '')), '');
+  v_nota     text := nullif(btrim(coalesce(p_nota, '')), '');
 begin
-  update public.comidas c
-     set stock = c.stock + t.cantidad
-    from (
-      select vi.comida_id, sum(vi.cantidad)::int as cantidad
-      from public.venta_items vi
-      where vi.venta_id = p_venta_id and vi.comida_id is not null
-      group by vi.comida_id
-    ) t
-   where c.id = t.comida_id;
+  if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then
+    raise exception 'El pedido está vacío.';
+  end if;
+  if v_cliente is not null and length(v_cliente) > 80 then
+    raise exception 'El nombre es demasiado largo (máximo 80 caracteres).';
+  end if;
+  if v_nota is not null and length(v_nota) > 300 then
+    raise exception 'La nota es demasiado larga (máximo 300 caracteres).';
+  end if;
+
+  insert into public.ventas (estado, total, cliente_nombre, nota, origen)
+  values (p_estado, 0, v_cliente, v_nota, p_origen)
+  returning id into v_venta_id;
+
+  perform public._agregar_items(v_venta_id, p_items, p_solo_activas);
+  perform public._recalcular_venta(v_venta_id);
+  return v_venta_id;
 end;
 $$;
 
 -- ---------------------------------------------------------------------
 -- 5. Funciones RPC (las que llama el frontend)
+-- El cambio de estado y el borrado de pedidos los hace el panel directo
+-- sobre la tabla "ventas" (las políticas RLS solo se lo permiten al admin).
 -- ---------------------------------------------------------------------
 
 -- La llama el catálogo (anónimo) justo antes de abrir WhatsApp.
--- Devuelve { numero, total, items: [{ nombre, cantidad, precio_unitario, subtotal }] }
+-- Devuelve { numero, total, items: [{ nombre, detalle, cantidad, precio_unitario, subtotal }] }
 create or replace function public.crear_pedido(
   items jsonb,
   cliente_nombre text default null,
@@ -366,13 +426,18 @@ as $$
 declare
   v_id uuid;
 begin
+  if not public.local_abierto() then
+    raise exception 'Ahora estamos cerrados. Mirá el horario en la carta y hacé tu pedido cuando abramos.';
+  end if;
+
   -- Freno simple contra abuso: como mucho 20 pedidos web por minuto en total.
   if (select count(*) from public.ventas
        where origen = 'web' and created_at > now() - interval '1 minute') >= 20 then
     raise exception 'Estamos recibiendo muchos pedidos en este momento. Probá de nuevo en un minuto.';
   end if;
 
-  v_id := public._crear_venta(crear_pedido.items, crear_pedido.cliente_nombre, crear_pedido.nota, 'web', true);
+  v_id := public._crear_venta(crear_pedido.items, crear_pedido.cliente_nombre, crear_pedido.nota,
+                              'web', true, 'pendiente');
 
   return (
     select jsonb_build_object(
@@ -392,63 +457,7 @@ begin
 end;
 $$;
 
--- Solo admin: pasa un pedido pendiente a confirmado y descuenta stock.
-create or replace function public.confirmar_venta(venta_id uuid)
-returns void
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_estado text;
-begin
-  if not public.es_admin() then
-    raise exception 'No tenés permisos para hacer esto.';
-  end if;
-
-  select v.estado into v_estado from public.ventas v where v.id = confirmar_venta.venta_id for update;
-  if not found then
-    raise exception 'La venta no existe.';
-  end if;
-  if v_estado <> 'pendiente' then
-    raise exception 'Solo se pueden confirmar pedidos pendientes (este está %).', v_estado;
-  end if;
-
-  perform public._descontar_stock(confirmar_venta.venta_id);
-  update public.ventas v set estado = 'confirmada' where v.id = confirmar_venta.venta_id;
-end;
-$$;
-
--- Solo admin: cancela. Si estaba confirmada, devuelve el stock.
-create or replace function public.cancelar_venta(venta_id uuid)
-returns void
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_estado text;
-begin
-  if not public.es_admin() then
-    raise exception 'No tenés permisos para hacer esto.';
-  end if;
-
-  select v.estado into v_estado from public.ventas v where v.id = cancelar_venta.venta_id for update;
-  if not found then
-    raise exception 'La venta no existe.';
-  end if;
-  if v_estado = 'cancelada' then
-    raise exception 'La venta ya estaba cancelada.';
-  end if;
-
-  if v_estado = 'confirmada' then
-    perform public._devolver_stock(cancelar_venta.venta_id);
-  end if;
-  update public.ventas v set estado = 'cancelada' where v.id = cancelar_venta.venta_id;
-end;
-$$;
-
--- Solo admin: venta en el local. Queda confirmada y descuenta stock.
+-- Solo admin: venta en el local. Queda cerrada (ya cobrada).
 -- Permite vender comidas inactivas (ocultas en el catálogo).
 create or replace function public.registrar_venta_manual(
   items jsonb,
@@ -468,28 +477,108 @@ begin
   end if;
 
   v_id := public._crear_venta(registrar_venta_manual.items, registrar_venta_manual.cliente_nombre,
-                              registrar_venta_manual.nota, 'manual', false);
-  perform public._descontar_stock(v_id);
-  update public.ventas v set estado = 'confirmada' where v.id = v_id;
+                              registrar_venta_manual.nota, 'manual', false, 'cerrado');
 
   return (select jsonb_build_object('numero', v.numero, 'total', v.total)
           from public.ventas v where v.id = v_id);
 end;
 $$;
 
+-- Solo admin: edita un pedido.
+--   items:  líneas que se conservan, con su cantidad: [{ "id": "<venta_item>", "cantidad": 2 }]
+--           (las que no vienen se borran; mantienen el precio con el que se pidieron)
+--   nuevos: líneas para sumar, mismo formato que crear_pedido (precio actual de la base)
+create or replace function public.editar_venta(
+  venta_id uuid,
+  items jsonb,
+  nuevos jsonb default '[]'::jsonb,
+  cliente_nombre text default null,
+  nota text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_estado  text;
+  v_items   jsonb := coalesce(editar_venta.items, '[]'::jsonb);
+  v_nuevos  jsonb := coalesce(editar_venta.nuevos, '[]'::jsonb);
+  v_cliente text := nullif(btrim(coalesce(editar_venta.cliente_nombre, '')), '');
+  v_nota    text := nullif(btrim(coalesce(editar_venta.nota, '')), '');
+  r         record;
+begin
+  if not public.es_admin() then
+    raise exception 'No tenés permisos para hacer esto.';
+  end if;
+
+  select v.estado into v_estado from public.ventas v where v.id = editar_venta.venta_id for update;
+  if not found then
+    raise exception 'El pedido no existe.';
+  end if;
+  if v_estado = 'cancelado' then
+    raise exception 'No se puede editar un pedido cancelado.';
+  end if;
+  if jsonb_typeof(v_items) <> 'array' or jsonb_typeof(v_nuevos) <> 'array' then
+    raise exception 'El formato del pedido no es válido.';
+  end if;
+  if v_cliente is not null and length(v_cliente) > 80 then
+    raise exception 'El nombre es demasiado largo (máximo 80 caracteres).';
+  end if;
+  if v_nota is not null and length(v_nota) > 300 then
+    raise exception 'La nota es demasiado larga (máximo 300 caracteres).';
+  end if;
+
+  begin
+    -- Borra las líneas que ya no están
+    delete from public.venta_items vi
+     where vi.venta_id = editar_venta.venta_id
+       and not exists (select 1 from jsonb_array_elements(v_items) e
+                        where (e ->> 'id')::uuid = vi.id);
+
+    -- Actualiza cantidades (el precio unitario queda como estaba)
+    for r in select x.id, x.cantidad from jsonb_to_recordset(v_items) as x (id uuid, cantidad int) loop
+      if r.id is null or r.cantidad is null or r.cantidad <= 0 or r.cantidad > 50 then
+        raise exception 'Hay un producto con una cantidad inválida.';
+      end if;
+      update public.venta_items vi
+         set cantidad = r.cantidad,
+             subtotal = vi.precio_unitario * r.cantidad
+       where vi.id = r.id and vi.venta_id = editar_venta.venta_id;
+    end loop;
+  exception
+    when invalid_text_representation or numeric_value_out_of_range then
+      raise exception 'El formato del pedido no es válido.';
+  end;
+
+  if jsonb_array_length(v_nuevos) > 0 then
+    perform public._agregar_items(editar_venta.venta_id, v_nuevos, false);
+  end if;
+
+  update public.ventas v
+     set cliente_nombre = v_cliente,
+         nota = v_nota
+   where v.id = editar_venta.venta_id;
+
+  perform public._recalcular_venta(editar_venta.venta_id);
+
+  return (select jsonb_build_object('numero', v.numero, 'total', v.total)
+          from public.ventas v where v.id = editar_venta.venta_id);
+end;
+$$;
+
 -- Permisos de ejecución: por defecto Postgres deja ejecutar a todos.
-revoke execute on function public._crear_venta(jsonb, text, text, text, boolean) from public, anon, authenticated;
-revoke execute on function public._descontar_stock(uuid) from public, anon, authenticated;
-revoke execute on function public._devolver_stock(uuid) from public, anon, authenticated;
-revoke execute on function public.confirmar_venta(uuid) from public, anon;
-revoke execute on function public.cancelar_venta(uuid) from public, anon;
+revoke execute on function public._agregar_items(uuid, jsonb, boolean) from public, anon, authenticated;
+revoke execute on function public._recalcular_venta(uuid) from public, anon, authenticated;
+revoke execute on function public._crear_venta(jsonb, text, text, text, boolean, text) from public, anon, authenticated;
 revoke execute on function public.registrar_venta_manual(jsonb, text, text) from public, anon;
+revoke execute on function public.editar_venta(uuid, jsonb, jsonb, text, text) from public, anon;
 
 grant execute on function public.es_admin() to anon, authenticated;   -- lo usan las políticas RLS
+grant execute on function public.local_abierto(timestamptz) to anon, authenticated;
 grant execute on function public.crear_pedido(jsonb, text, text) to anon, authenticated;
-grant execute on function public.confirmar_venta(uuid) to authenticated;
-grant execute on function public.cancelar_venta(uuid) to authenticated;
 grant execute on function public.registrar_venta_manual(jsonb, text, text) to authenticated;
+grant execute on function public.editar_venta(uuid, jsonb, jsonb, text, text) to authenticated;
 
 -- ---------------------------------------------------------------------
 -- 6. Seguridad a nivel de fila (RLS)
@@ -500,6 +589,7 @@ alter table public.comidas     enable row level security;
 alter table public.ventas      enable row level security;
 alter table public.venta_items enable row level security;
 alter table public.admins      enable row level security;
+alter table public.horarios    enable row level security;
 
 -- Defensa extra: el rol anónimo no toca ventas ni admins de forma directa.
 revoke all on public.ventas, public.venta_items, public.admins from anon;
@@ -539,6 +629,19 @@ drop policy if exists "comidas_admin_borra" on public.comidas;
 create policy "comidas_admin_borra" on public.comidas
   for delete to authenticated using (public.es_admin());
 
+-- horarios: lectura pública (la carta muestra si está abierto), escritura solo admin
+drop policy if exists "horarios_lectura_publica" on public.horarios;
+create policy "horarios_lectura_publica" on public.horarios
+  for select to anon, authenticated using (true);
+
+drop policy if exists "horarios_admin_inserta" on public.horarios;
+create policy "horarios_admin_inserta" on public.horarios
+  for insert to authenticated with check (public.es_admin());
+
+drop policy if exists "horarios_admin_edita" on public.horarios;
+create policy "horarios_admin_edita" on public.horarios
+  for update to authenticated using (public.es_admin()) with check (public.es_admin());
+
 -- ventas y venta_items: solo admin (el público entra únicamente por crear_pedido)
 drop policy if exists "ventas_admin" on public.ventas;
 create policy "ventas_admin" on public.ventas
@@ -552,6 +655,18 @@ create policy "venta_items_admin" on public.venta_items
 drop policy if exists "admins_ver_propio" on public.admins;
 create policy "admins_ver_propio" on public.admins
   for select to authenticated using (user_id = auth.uid());
+
+-- Tiempo real: el panel se entera al instante de los pedidos nuevos o cambiados.
+-- Respeta las políticas de arriba: solo el admin recibe los cambios de "ventas".
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (select 1 from pg_publication_tables
+                      where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'ventas') then
+    alter publication supabase_realtime add table public.ventas;
+  end if;
+end;
+$$;
 
 -- ---------------------------------------------------------------------
 -- 7. Storage: bucket público "comidas"
@@ -587,7 +702,6 @@ create policy "comidas_storage_admin_borra" on storage.objects
 -- ---------------------------------------------------------------------
 -- 8. Datos iniciales: el menú impreso de Las Palmeras Club
 -- Solo inserta lo que falta (no pisa cambios hechos desde el panel).
--- El stock arranca en 20 unidades: ajustalo desde el panel antes de abrir.
 -- ---------------------------------------------------------------------
 
 insert into public.categorias (nombre, orden) values
@@ -603,7 +717,7 @@ on conflict (nombre) do nothing;
 -- Hamburguesas: un solo producto por hamburguesa, con variantes (Simple / Doble)
 -- y los ingredientes que se pueden sacar. Si la base todavía tiene los
 -- productos separados ("X doble" y "X simple"), los une en uno (conserva la
--- foto y el stock del doble). Se puede volver a correr sin problema.
+-- foto del doble). Se puede volver a correr sin problema.
 do $$
 declare
   v_cat   uuid;
@@ -673,15 +787,68 @@ begin
         delete from public.comidas where id = s.id;   -- las ventas viejas conservan el nombre
       end if;
     else
-      insert into public.comidas (nombre, descripcion, precio, stock, categoria_id, opciones)
-      values (r.base, r.descripcion, r.precio_simple, 20, v_cat, v_opc);
+      insert into public.comidas (nombre, descripcion, precio, categoria_id, opciones)
+      values (r.base, r.descripcion, r.precio_simple, v_cat, v_opc);
     end if;
   end loop;
 end;
 $$;
 
-insert into public.comidas (nombre, descripcion, precio, destacado, stock, categoria_id)
-select m.nombre, m.descripcion, m.precio, m.destacado, 20, c.id
+-- Napolitana: un solo producto y el cliente elige para cuántas personas.
+-- Si la base todavía tiene las tres separadas, las une en una (conserva sus
+-- precios y la primera foto que encuentre). Se puede volver a correr.
+do $$
+declare
+  v_cat  uuid;
+  u      public.comidas%rowtype;
+  d      public.comidas%rowtype;
+  t      public.comidas%rowtype;
+  v_base uuid;
+  v_vars jsonb;
+  v_opc  jsonb;
+begin
+  if exists (select 1 from public.comidas where nombre = 'Napolitana') then
+    return;
+  end if;
+
+  select * into u from public.comidas where nombre = 'Napolitana para una persona';
+  select * into d from public.comidas where nombre = 'Napolitana para dos personas';
+  select * into t from public.comidas where nombre = 'Napolitana para tres personas';
+
+  v_vars := jsonb_build_array(
+    jsonb_build_object('nombre', 'Para 1 persona',  'precio', coalesce(u.precio_promo, u.precio, 10000)),
+    jsonb_build_object('nombre', 'Para 2 personas', 'precio', coalesce(d.precio_promo, d.precio, 19000)),
+    jsonb_build_object('nombre', 'Para 3 personas', 'precio', coalesce(t.precio_promo, t.precio, 28000)));
+  v_opc := jsonb_build_object('variantes', v_vars, 'pregunta', '¿Para cuántas personas?');
+  v_base := coalesce(u.id, d.id, t.id);
+
+  if v_base is null then
+    select id into v_cat from public.categorias where nombre = 'Napolitanas';
+    if v_cat is not null then
+      insert into public.comidas (nombre, precio, categoria_id, opciones)
+      values ('Napolitana', (v_vars -> 0 ->> 'precio')::numeric, v_cat, v_opc);
+    end if;
+    return;
+  end if;
+
+  update public.comidas
+     set nombre       = 'Napolitana',
+         precio       = (v_vars -> 0 ->> 'precio')::numeric,
+         precio_promo = null,
+         opciones     = opciones || v_opc,
+         imagen_url   = coalesce(u.imagen_url, d.imagen_url, t.imagen_url),
+         imagen_path  = case when u.imagen_url is not null then u.imagen_path
+                             when d.imagen_url is not null then d.imagen_path
+                             else t.imagen_path end
+   where id = v_base;
+
+  -- las ventas viejas conservan el nombre de cada napolitana
+  delete from public.comidas where id in (u.id, d.id, t.id) and id <> v_base;
+end;
+$$;
+
+insert into public.comidas (nombre, descripcion, precio, destacado, categoria_id)
+select m.nombre, m.descripcion, m.precio, m.destacado, c.id
 from (values
   ('Combos', 'Promo Cheese Simples', '3 burguers cheese simples con papas.', 17000, true),
   ('Combos', 'Promo Burritos Burguer', '2 burritos a elección (Texas o Milwaukee) con papas.', 16000, true),
@@ -699,9 +866,6 @@ from (values
   ('Sandwiches', 'Sándwich de milanesa especial', null, 9500, false),
   ('Sandwiches', 'Sándwich de milanesa criolla', null, 9500, false),
   ('Sandwiches', 'Sándwich de milanesa de la casa', null, 9500, false),
-  ('Napolitanas', 'Napolitana para una persona', null, 10000, false),
-  ('Napolitanas', 'Napolitana para dos personas', null, 19000, false),
-  ('Napolitanas', 'Napolitana para tres personas', null, 28000, false),
   ('Papas', 'Papas con salchicha', null, 8500, false),
   ('Papas', 'Papas tradicionales a caballo', null, 9000, false),
   ('Papas', 'Papas americanas', null, 10000, false),

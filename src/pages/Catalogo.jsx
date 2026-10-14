@@ -5,6 +5,7 @@ import { supabase, mensajeDeError, supabaseConfigurado } from "../lib/supabase";
 import { normalizarTexto, tienePromo } from "../lib/formato";
 import { CONFIG_VACIA, claveLinea, itemParaPedido, precioLinea, textoConfig } from "../lib/opciones";
 import { armarMensajePedido, linkWhatsApp, mensajeConsulta, notaParaRegistro } from "../lib/whatsapp";
+import { estadoLocal, textoApertura } from "../lib/horarios";
 import { revalidarCarrito, useCarrito } from "../hooks/useCarrito";
 import CarritoProvider from "../components/catalogo/CarritoProvider";
 import Navbar from "../components/catalogo/Navbar";
@@ -16,20 +17,24 @@ import Carrito from "../components/catalogo/Carrito";
 import BotonFlotante from "../components/catalogo/BotonFlotante";
 import Footer from "../components/catalogo/Footer";
 import Preloader from "../components/catalogo/Preloader";
+import AvisoCerrado from "../components/catalogo/AvisoCerrado";
 
-// Trae categorías y comidas activas
+// Trae categorías, comidas activas y el horario de atención
 async function obtenerCatalogo() {
   if (!supabaseConfigurado) throw new Error("Supabase no está configurado.");
-  const [cats, comidas] = await Promise.all([
+  const [cats, comidas, horarios] = await Promise.all([
     supabase.from("categorias").select("id, nombre, orden").order("orden").order("nombre"),
     supabase
       .from("comidas")
-      .select("id, nombre, descripcion, precio, precio_promo, categoria_id, imagen_url, destacado, stock, opciones")
+      .select("id, nombre, descripcion, precio, precio_promo, categoria_id, imagen_url, destacado, opciones")
       .eq("activo", true),
+    supabase.from("horarios").select("dia, abierto, desde, hasta"),
   ]);
   if (cats.error) throw cats.error;
   if (comidas.error) throw comidas.error;
-  return { categorias: cats.data, comidas: comidas.data };
+  // Si falla el horario la carta igual se muestra (la base controla el horario al recibir el pedido)
+  if (horarios.error) console.warn("No se pudo leer el horario", horarios.error);
+  return { categorias: cats.data, comidas: comidas.data, horarios: horarios.data ?? [] };
 }
 
 // Abre WhatsApp en otra pestaña. Si el navegador bloquea la ventana
@@ -55,7 +60,7 @@ const DURACION_INTRO_MS = 2100;
 
 function CatalogoContenido() {
   const carrito = useCarrito();
-  const [datos, setDatos] = useState({ categorias: [], comidas: [] });
+  const [datos, setDatos] = useState({ categorias: [], comidas: [], horarios: [] });
   const [estado, setEstado] = useState("cargando"); // cargando | listo | error
   const [primeraCarga, setPrimeraCarga] = useState(true);
   // La pantalla de carga se muestra al menos este tiempo para que se aprecie la marca
@@ -63,6 +68,12 @@ function CatalogoContenido() {
   useEffect(() => {
     const t = setTimeout(() => setIntro(false), DURACION_INTRO_MS);
     return () => clearTimeout(t);
+  }, []);
+  // Reloj para saber si el local está abierto (se revisa cada minuto)
+  const [ahora, setAhora] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setAhora(Date.now()), 60_000);
+    return () => clearInterval(id);
   }, []);
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState("todos");
@@ -115,7 +126,8 @@ function CatalogoContenido() {
       .catch(() => setEstado("error"));
   }
 
-  const { categorias, comidas } = datos;
+  const { categorias, comidas, horarios } = datos;
+  const local = useMemo(() => estadoLocal(horarios, new Date(ahora)), [horarios, ahora]);
   const comidasPorId = useMemo(() => new Map(comidas.map((c) => [c.id, c])), [comidas]);
   const categoriasPorId = useMemo(() => new Map(categorias.map((c) => [c.id, c])), [categorias]);
 
@@ -167,18 +179,10 @@ function CatalogoContenido() {
   const unidades = lineas.reduce((acc, l) => acc + l.cantidad, 0);
   const total = lineas.reduce((acc, l) => acc + l.precioUnitario * l.cantidad, 0);
 
-  // Agrega "cantidad" unidades de una comida con esa configuración, respetando stock y límites.
+  // Agrega "cantidad" unidades de una comida con esa configuración, respetando los límites.
   // Devuelve true si se agregó.
   function sumar(comida, config = CONFIG_VACIA, cantidad = 1) {
     const actual = carrito.cantidadDe(comida.id);
-    if (actual + cantidad > comida.stock) {
-      toast.error(
-        comida.stock - actual <= 0
-          ? `No hay más stock de "${comida.nombre}" (quedan ${comida.stock}).`
-          : `Solo quedan ${comida.stock - actual} de "${comida.nombre}".`
-      );
-      return false;
-    }
     if (actual + cantidad > LIMITES.unidadesPorProducto) {
       toast.error(`Podés pedir hasta ${LIMITES.unidadesPorProducto} unidades de cada producto.`);
       return false;
@@ -223,6 +227,10 @@ function CatalogoContenido() {
 
   async function enviarPedido({ cliente, nota, entrega, direccion }) {
     if (lineas.length === 0) return false;
+    if (!local.abierto) {
+      toast.error(`Ahora estamos cerrados. ${textoApertura(local)}.`);
+      return false;
+    }
     if (!NEGOCIO.whatsapp) {
       toast.error("Falta configurar el número de WhatsApp del negocio.");
       return false;
@@ -244,7 +252,7 @@ function CatalogoContenido() {
     if (error || !data) {
       ventana?.close();
       toast.error(mensajeDeError(error, "No pudimos registrar tu pedido. Probá de nuevo."));
-      // Puede haber cambiado el stock: refrescamos el catálogo
+      // Puede haber cambiado el menú (precios, opciones): refrescamos el catálogo
       obtenerCatalogo().then((nuevos) => aplicarDatos(nuevos, itemsCarrito)).catch(() => {});
       return false;
     }
@@ -282,6 +290,8 @@ function CatalogoContenido() {
           <h2 className="text-sm font-semibold uppercase tracking-[0.3em] text-tinta">Nuestra carta</h2>
           <p className="mt-1 text-sm text-tinta-suave">Armá tu pedido y mandalo por WhatsApp.</p>
         </section>
+
+        {estado !== "error" && !local.abierto && <AvisoCerrado estado={local} horarios={horarios} />}
 
         {estado === "error" ? (
           <div className="tarjeta mx-auto my-10 max-w-md p-6 text-center">
@@ -346,7 +356,6 @@ function CatalogoContenido() {
                     onRestar={() => restarSimple(comida)}
                     onPersonalizar={() => abrirPersonalizar(comida)}
                     onVerDetalle={() => setDetalleId(comida.id)}
-                    onConsultar={() => consultar(comida)}
                   />
                 ))}
               </div>
@@ -371,7 +380,9 @@ function CatalogoContenido() {
 
       <PersonalizarProducto
         comida={personalizando}
-        restantes={personalizando ? Math.max(1, personalizando.stock - carrito.cantidadDe(personalizando.id)) : 1}
+        maximo={
+          personalizando ? Math.max(1, LIMITES.unidadesPorProducto - carrito.cantidadDe(personalizando.id)) : 1
+        }
         onCerrar={() => setPersonalizandoId(null)}
         onAgregar={(config, cantidad) => {
           if (personalizando && sumar(personalizando, config, cantidad)) setPersonalizandoId(null);
@@ -392,6 +403,7 @@ function CatalogoContenido() {
         }}
         onEnviar={enviarPedido}
         enviando={enviando}
+        cerrado={local.abierto ? null : textoApertura(local)}
       />
 
       <BotonFlotante

@@ -26,7 +26,7 @@ Vas a necesitar:
 2. Abrí en VS Code el archivo `supabase/schema.sql`, copiá **todo** su contenido y pegalo en el editor de Supabase.
 3. Tocá **Run** (abajo a la derecha). Tiene que aparecer **"Success. No rows returned"**.
 
-Esto crea las tablas, las funciones, la seguridad, el espacio para las fotos y carga las 7 categorías y los 46 productos del menú impreso (con stock 20 cada uno).
+Esto crea las tablas, las funciones, la seguridad, el espacio para las fotos y carga las 7 categorías y los productos del menú impreso.
 
 Para comprobarlo: **Table Editor → comidas**. Tenés que ver los productos.
 
@@ -81,7 +81,26 @@ Crear el usuario no alcanza: hay que anotarlo en la lista de administradores.
    VITE_INSTAGRAM_URL=https://www.instagram.com/laspalmeras.club
    ```
 
-3. El archivo `.env` **no se sube a GitHub** (ya está ignorado). Guardalo.
+3. Para las fotos, sumá también las tres claves de Cloudinary (ver "Paso 7 bis").
+4. El archivo `.env` **no se sube a GitHub** (ya está ignorado). Guardalo.
+
+## Paso 7 bis. Conectar Cloudinary (fotos de las comidas)
+
+Las fotos se guardan en [Cloudinary](https://cloudinary.com), siempre en formato **WebP** (livianas y rápidas). En la carta se muestran recortadas con la comida centrada.
+
+1. Creá una cuenta gratis en [cloudinary.com](https://cloudinary.com).
+2. Entrá a **Settings → API Keys** y copiá **Cloud name**, **API Key** y **API Secret**.
+3. Agregalas al `.env` (y después a Vercel), **sin** `VITE_` adelante:
+
+   ```
+   CLOUDINARY_CLOUD_NAME=tu-cloud-name
+   CLOUDINARY_API_KEY=123456789012345
+   CLOUDINARY_API_SECRET=xxxxxxxxxxxxxxxx
+   ```
+
+   Sin `VITE_` esas claves se quedan en el servidor (la función `api/cloudinary.js`) y nunca llegan al navegador. El **API Secret** no se comparte con nadie.
+
+Las fotos que ya estaban cargadas en Supabase siguen funcionando. Cuando cambies una, la nueva ya va a Cloudinary.
 
 ## Paso 8. Probar en tu compu
 
@@ -97,14 +116,15 @@ Abrí `http://localhost:5173` y comprobá:
 - [ ] El catálogo muestra las categorías y los productos.
 - [ ] Al agregar productos y tocar **Enviar pedido por WhatsApp** se abre WhatsApp con el mensaje.
 - [ ] Entrá a `http://localhost:5173/admin` (o al link **Acceso administrador** del final de la página) e iniciá sesión con el correo y la contraseña del Paso 4.
-- [ ] En **Ventas** aparece el pedido que acabás de enviar como **Pendiente**.
+- [ ] En **Ventas**, arriba de todo en **Pedidos sin cerrar**, aparece el pedido que acabás de enviar como **Pendiente**.
+- [ ] En **Comidas → Editar** subí una foto: tiene que guardarse sin errores (eso confirma que Cloudinary está bien conectado).
 
 Después de hacer cambios en el `.env`, cortá el servidor (Ctrl + C) y volvé a correr `npm run dev`.
 
 ## Paso 9. Publicar en Vercel
 
 1. En [vercel.com](https://vercel.com) tocá **Add New → Project** e importá el repositorio `carta-palmeras-club`.
-2. Vercel detecta Vite solo. Antes de desplegar, abrí **Environment Variables** y cargá las **mismas cuatro variables** del `.env`.
+2. Vercel detecta Vite solo. Antes de desplegar, abrí **Environment Variables** y cargá **todas** las variables del `.env` (las cuatro de la página y las tres de Cloudinary).
 3. Tocá **Deploy**.
 4. Cuando termine, probá de nuevo la lista de arriba, pero en la dirección que te da Vercel.
 
@@ -115,12 +135,19 @@ Si más adelante cambiás una variable, hay que hacer **Redeploy** en Vercel par
 Cada comida puede tener opciones para que el cliente arme su pedido. Se cargan desde el panel: **Comidas → Editar → Opciones para el cliente**.
 
 - **Variantes:** tamaños o versiones con su precio (Simple, Doble, Triple…). Si hay variantes, el precio de la comida sale de ellas y en el catálogo aparece "Desde $X".
-- **Ingredientes que se pueden sacar:** separados por coma (Cebolla, Tomate…). Sacar un ingrediente no cambia el precio.
+- **Ingredientes que se pueden sacar:** se cargan solos con los ingredientes que escribas en la **descripción** (separados por coma o "y"). Tocá los que **no** se pueden sacar para desmarcarlos, o sumá otros a mano. Sacar un ingrediente no cambia el precio.
+- **Pregunta de las variantes:** el título que ve el cliente arriba de las variantes. Por defecto es "¿Cómo la querés?"; en la Napolitana dice "¿Para cuántas personas?".
 - **Extras con costo:** cosas que se suman al precio (carne extra, huevo…). Vienen cargados con precio 0: el cliente ve "Precio a confirmar" y el local le confirma el valor por WhatsApp. Poné el precio real cuando lo quieran fijo, o borrá el extra para que no aparezca.
 
-El cliente además puede escribir una aclaración (por ejemplo "bien cocida"). Todo llega en el mensaje de WhatsApp y se ve en el detalle de cada venta del panel. El stock es por comida: una doble y una simple de la misma hamburguesa descuentan del mismo stock.
+El cliente además puede escribir una aclaración (por ejemplo "bien cocida"). Todo llega en el mensaje de WhatsApp y se ve en el detalle de cada venta del panel.
 
-**Si ya habías corrido `supabase/schema.sql` antes de esta versión**, volvé a correrlo completo en el SQL Editor: agrega las opciones y une las hamburguesas "doble" y "simple" en un solo producto (conserva la foto y el stock del doble). Se puede correr las veces que haga falta.
+**Si ya habías corrido `supabase/schema.sql` antes de esta versión**, volvé a correrlo completo en el SQL Editor. Se puede correr las veces que haga falta, y en una base que ya está andando:
+- saca el stock (la columna y las funciones que lo descontaban),
+- pasa las ventas "confirmadas" a **Cerrado** y las "canceladas" a **Cancelado**,
+- une las tres napolitanas en una sola **Napolitana** con opción para 1, 2 o 3 personas (conserva sus precios y la foto),
+- agrega la función para editar pedidos desde el panel,
+- crea la tabla **horarios** (arranca con todos los días "todo el día") y hace que la base rechace pedidos fuera de horario,
+- activa el **tiempo real** de la tabla `ventas`, para que el panel se entere solo de los pedidos nuevos.
 
 ## Si algo no anda
 
@@ -135,7 +162,11 @@ El cliente además puede escribir una aclaración (por ejemplo "bien cocida"). T
 
 ## Cosas que conviene saber
 
-- **El stock:** un pedido de la web queda **pendiente** y no descuenta stock. Se descuenta cuando el dueño toca **Confirmar** en el panel. Si cancela una venta confirmada, el stock vuelve.
-- **Fotos:** se suben desde el panel (Comidas → Editar). Se achican solas a 1200 px.
+- **Los pedidos:** uno de la web llega como **Pendiente**. Desde el menú desplegable de cada pedido se pasa a **En preparación → Enviado → Entregado → Cerrado** (o **Cancelado**). **Cerrado** quiere decir entregado y cobrado: solo los cerrados cuentan en la facturación. Los que falta cerrar quedan arriba de todo en Ventas, de cualquier fecha, hasta que alguien los cierre. Cada pedido se puede ver, editar (cantidades, sumar o sacar productos, cliente y nota) o borrar.
+- **Pedidos en vivo:** con el panel abierto, los pedidos se actualizan solos. Cuando entra uno nuevo suena un aviso, aparece un cartel con botón **Ver** y la pestaña **Ventas** muestra cuántos quedan sin cerrar (late en rojo si hay pendientes). El navegador solo deja sonar después de tocar algo en el panel: con el primer toque ya queda listo. El botón **🔔 Activar avisos** del encabezado permite que llegue una notificación aunque el panel esté en otra pestaña.
+  Si los pedidos nuevos tardan hasta 30 segundos en aparecer, el tiempo real no está activo: en Supabase andá a **Database → Publications → supabase_realtime** y activá la tabla `ventas` (el SQL ya lo intenta hacer solo).
+- **Horario de atención:** se carga en el panel, pestaña **Horarios**. Fuera de horario la carta muestra "Ahora estamos cerrados · Abrimos hoy a las 20:00 hs" y no deja mandar el pedido (la base también lo rechaza). Si cierran después de medianoche, poné por ejemplo 20:00 a 01:00. Misma hora en los dos campos = todo el día.
+- **No hay stock:** si un día no hay algo, desactivá la comida (interruptor **Activo** en Comidas) y no aparece en la carta.
+- **Fotos:** se suben desde el panel (Comidas → Editar). Se achican solas a 1200 px, se guardan en Cloudinary en WebP y en la carta se ven centradas en la comida.
 - **Seguridad:** la clave que usa la página es pública a propósito. Lo que protege los datos son las reglas (RLS) del archivo SQL: cualquiera puede ver el menú y mandar un pedido, pero solo el administrador puede cambiar productos o ver las ventas.
 - **Copias de seguridad:** el plan gratuito de Supabase pausa los proyectos sin uso durante una semana. Si pasa, entrá al panel de Supabase y tocá **Restore project**.

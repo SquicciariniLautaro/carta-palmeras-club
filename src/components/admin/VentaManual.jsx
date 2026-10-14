@@ -1,12 +1,12 @@
 import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { supabase, mensajeDeError } from "../../lib/supabase";
-import { formatearPrecio, precioFinal } from "../../lib/formato";
-import { opcionesDe } from "../../lib/opciones";
+import { formatearPrecio } from "../../lib/formato";
 import { IconoBasura, IconoMas } from "../ui/Iconos";
 import Modal from "../ui/Modal";
+import { entradasDeComidas } from "./ventasUtils";
 
-// Registrar una venta hecha en el local: queda confirmada y descuenta stock
+// Registrar una venta hecha en el local: queda cerrada (ya cobrada)
 export default function VentaManual({ abierto, comidas, onCerrar, onRegistrada }) {
   const [lineas, setLineas] = useState([]); // [{ id, variante, cantidad }]
   const [seleccion, setSeleccion] = useState("");
@@ -15,27 +15,7 @@ export default function VentaManual({ abierto, comidas, onCerrar, onRegistrada }
   const [nota, setNota] = useState("");
   const [guardando, setGuardando] = useState(false);
 
-  // Una entrada por comida, o una por variante si la comida las tiene (Simple, Doble…)
-  const entradas = useMemo(() => {
-    const lista = [];
-    for (const c of [...comidas].sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))) {
-      const { variantes } = opcionesDe(c);
-      if (variantes.length === 0) {
-        lista.push({ valor: c.id, comida: c, variante: null, nombre: c.nombre, precio: precioFinal(c) });
-      } else {
-        for (const v of variantes) {
-          lista.push({
-            valor: `${c.id}|${v.nombre}`,
-            comida: c,
-            variante: v.nombre,
-            nombre: `${c.nombre} · ${v.nombre}`,
-            precio: v.precio,
-          });
-        }
-      }
-    }
-    return lista;
-  }, [comidas]);
+  const entradas = useMemo(() => entradasDeComidas(comidas), [comidas]);
   const entradaPorValor = useMemo(() => new Map(entradas.map((e) => [e.valor, e])), [entradas]);
   const valorDe = (l) => (l.variante ? `${l.id}|${l.variante}` : l.id);
   const total = lineas.reduce((acc, l) => acc + (entradaPorValor.get(valorDe(l))?.precio ?? 0) * l.cantidad, 0);
@@ -47,10 +27,6 @@ export default function VentaManual({ abierto, comidas, onCerrar, onRegistrada }
     if (!entrada) return toast.error("Elegí una comida.");
     if (!Number.isInteger(n) || n <= 0) return toast.error("La cantidad tiene que ser un entero mayor a 0.");
     const comida = entrada.comida;
-    const yaHayDeLaComida = lineas.filter((l) => l.id === comida.id).reduce((acc, l) => acc + l.cantidad, 0);
-    if (yaHayDeLaComida + n > comida.stock) {
-      return toast.error(`No hay stock suficiente de "${comida.nombre}" (quedan ${comida.stock}).`);
-    }
     const existe = lineas.some((l) => valorDe(l) === entrada.valor);
     setLineas((prev) =>
       existe
@@ -97,8 +73,8 @@ export default function VentaManual({ abierto, comidas, onCerrar, onRegistrada }
           <select id="vm-comida" className="campo flex-1" value={seleccion} onChange={(e) => setSeleccion(e.target.value)}>
             <option value="">Elegí una comida…</option>
             {entradas.map((e) => (
-              <option key={e.valor} value={e.valor} disabled={e.comida.stock <= 0}>
-                {e.nombre} · {formatearPrecio(e.precio)} · stock {e.comida.stock}
+              <option key={e.valor} value={e.valor}>
+                {e.nombre} · {formatearPrecio(e.precio)}
                 {e.comida.activo ? "" : " (inactiva)"}
               </option>
             ))}
@@ -172,7 +148,7 @@ export default function VentaManual({ abierto, comidas, onCerrar, onRegistrada }
           </button>
         </div>
         <p className="text-xs text-tinta-suave">
-          Los precios finales los calcula la base de datos con los valores actuales. La venta queda confirmada y descuenta stock.
+          Los precios finales los calcula la base de datos con los valores actuales. La venta queda cerrada: ya cuenta en la facturación.
         </p>
       </div>
     </Modal>

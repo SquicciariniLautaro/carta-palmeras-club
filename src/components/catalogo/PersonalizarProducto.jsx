@@ -1,7 +1,7 @@
 import { useState } from "react";
 import Modal from "../ui/Modal";
 import { formatearPrecio } from "../../lib/formato";
-import { LARGO_ACLARACION, configInicial, opcionesDe, precioLinea } from "../../lib/opciones";
+import { LARGO_ACLARACION, PREGUNTA_POR_DEFECTO, configInicial, opcionesDe, precioLinea } from "../../lib/opciones";
 import ControlCantidad from "./ControlCantidad";
 import { ImagenComida } from "./TarjetaProducto";
 
@@ -39,8 +39,8 @@ function Opcion({ tipo, nombre, marcado, onCambiar, children, precio }) {
 }
 
 // Contenido del armado: se monta de nuevo cada vez que se abre, así arranca limpio
-function Armado({ comida, restantes, onAgregar }) {
-  const { variantes, quitar, agregar } = opcionesDe(comida);
+function Armado({ comida, maximo, onAgregar }) {
+  const { variantes, quitar, agregar, pregunta } = opcionesDe(comida);
   const [config, setConfig] = useState(() => configInicial(comida));
   const [cantidad, setCantidad] = useState(1);
 
@@ -60,11 +60,11 @@ function Armado({ comida, restantes, onAgregar }) {
         onAgregar(config, cantidad);
       }}
     >
-      <ImagenComida comida={comida} className="aspect-[16/9] w-full rounded-xl" />
+      <ImagenComida comida={comida} className="aspect-[16/9] w-full rounded-xl" proporcion="16:9" ancho={900} />
       {comida.descripcion && <p className="text-sm text-tinta-suave">{comida.descripcion}</p>}
 
       {variantes.length > 0 && (
-        <Seccion titulo="¿Cómo la querés?">
+        <Seccion titulo={pregunta || PREGUNTA_POR_DEFECTO}>
           {variantes.map((v) => (
             <Opcion
               key={v.nombre}
@@ -137,7 +137,7 @@ function Armado({ comida, restantes, onAgregar }) {
         <div className="w-28 shrink-0">
           <ControlCantidad
             cantidad={cantidad}
-            onSumar={() => setCantidad((n) => Math.min(n + 1, restantes))}
+            onSumar={() => setCantidad((n) => Math.min(n + 1, maximo))}
             onRestar={() => setCantidad((n) => Math.max(n - 1, 1))}
             nombre={comida.nombre}
           />
@@ -152,10 +152,10 @@ function Armado({ comida, restantes, onAgregar }) {
 }
 
 // Ventana para elegir variante, ingredientes a sacar, extras y aclaraciones
-export default function PersonalizarProducto({ comida, restantes, onCerrar, onAgregar }) {
+export default function PersonalizarProducto({ comida, maximo, onCerrar, onAgregar }) {
   return (
     <Modal abierto={Boolean(comida)} onCerrar={onCerrar} titulo={comida?.nombre ?? ""}>
-      {comida && <Armado key={comida.id} comida={comida} restantes={restantes} onAgregar={onAgregar} />}
+      {comida && <Armado key={comida.id} comida={comida} maximo={maximo} onAgregar={onAgregar} />}
     </Modal>
   );
 }

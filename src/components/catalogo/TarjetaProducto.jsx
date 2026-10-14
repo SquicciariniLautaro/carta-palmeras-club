@@ -1,34 +1,36 @@
-import { STOCK_BAJO } from "../../config";
 import { tienePromo } from "../../lib/formato";
+import { urlImagen } from "../../lib/imagenes";
 import { tieneOpciones } from "../../lib/opciones";
-import { IconoEstrella, IconoWhatsApp } from "../ui/Iconos";
+import { IconoEstrella } from "../ui/Iconos";
 import ControlCantidad from "./ControlCantidad";
 import Precio from "./Precio";
 
-export function ImagenComida({ comida, className = "" }) {
+// Foto de la comida, siempre centrada en su recuadro. "proporcion" y "ancho"
+// tienen que coincidir con el recuadro (ej. aspect-square → "1:1").
+export function ImagenComida({ comida, className = "", proporcion = "1:1", ancho = 600 }) {
   if (!comida.imagen_url) {
     return (
-      <div className={`grid place-items-center bg-borde text-xs text-tinta-suave ${className}`}>Sin imagen</div>
+      <div className={`grid place-items-center bg-borde text-center text-xs text-tinta-suave ${className}`}>
+        Sin imagen
+      </div>
     );
   }
   return (
     <img
-      src={comida.imagen_url}
+      src={urlImagen(comida.imagen_url, { ancho, proporcion })}
       alt={comida.nombre}
       loading="lazy"
       decoding="async"
-      className={`object-cover ${className}`}
+      className={`block object-cover object-center ${className}`}
     />
   );
 }
 
-export default function TarjetaProducto({ comida, cantidad, onAgregar, onSumar, onRestar, onPersonalizar, onVerDetalle, onConsultar }) {
+export default function TarjetaProducto({ comida, cantidad, onAgregar, onSumar, onRestar, onPersonalizar, onVerDetalle }) {
   const conOpciones = tieneOpciones(comida);
-  const agotado = comida.stock <= 0;
-  const pocas = !agotado && comida.stock <= STOCK_BAJO;
 
   return (
-    <article className={`tarjeta flex flex-col overflow-hidden ${agotado ? "opacity-55" : ""}`}>
+    <article className="tarjeta flex flex-col overflow-hidden">
       <button
         type="button"
         onClick={onVerDetalle}
@@ -46,16 +48,6 @@ export default function TarjetaProducto({ comida, cantidad, onAgregar, onSumar, 
             </span>
           )}
         </div>
-        {agotado && (
-          <span className="absolute inset-x-0 bottom-0 bg-fondo/85 py-1 text-center text-xs font-bold uppercase tracking-wider">
-            Agotado
-          </span>
-        )}
-        {pocas && (
-          <span className="absolute bottom-2 right-2 rounded-full bg-fondo/85 px-2 py-0.5 text-[11px] font-semibold text-brasa">
-            Quedan {comida.stock}
-          </span>
-        )}
       </button>
 
       <div className="flex flex-1 flex-col gap-2 p-3">
@@ -63,11 +55,7 @@ export default function TarjetaProducto({ comida, cantidad, onAgregar, onSumar, 
         <div className="mt-auto">
           <Precio comida={comida} />
         </div>
-        {agotado ? (
-          <button type="button" onClick={onConsultar} className="boton-secundario w-full px-2 text-xs">
-            <IconoWhatsApp className="size-4 text-whatsapp" /> Consultar
-          </button>
-        ) : conOpciones ? (
+        {conOpciones ? (
           <button type="button" onClick={onPersonalizar} className="boton-primario w-full px-2">
             {cantidad > 0 ? `Agregar otra (${cantidad})` : "Armar mi pedido"}
           </button>

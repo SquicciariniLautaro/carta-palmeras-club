@@ -4,9 +4,12 @@ import { precioFinal } from "./formato";
 //   variantes: [{ nombre: "Simple", precio: 8500 }, ...]  el precio sale de la variante elegida
 //   quitar:    ["Cebolla", ...]                           ingredientes que se pueden sacar
 //   agregar:   [{ nombre: "Huevo", precio: 1000 }, ...]   extras con costo
+//   pregunta:  "¿Para cuántas personas?"                  título de las variantes (opcional)
 // El precio final lo vuelve a calcular la base al crear el pedido.
 
 export const LARGO_ACLARACION = 80;
+export const LARGO_PREGUNTA = 60;
+export const PREGUNTA_POR_DEFECTO = "¿Cómo la querés?";
 
 export const CONFIG_VACIA = Object.freeze({ variante: null, quitar: [], agregar: [], aclaracion: "" });
 
@@ -21,7 +24,8 @@ export function opcionesDe(comida) {
   const agregar = (Array.isArray(o.agregar) ? o.agregar : [])
     .filter((a) => a && esTexto(a.nombre) && Number(a.precio) >= 0)
     .map((a) => ({ nombre: a.nombre, precio: Number(a.precio) }));
-  return { variantes, quitar, agregar };
+  const pregunta = esTexto(o.pregunta) ? o.pregunta.trim().slice(0, LARGO_PREGUNTA) : "";
+  return { variantes, quitar, agregar, pregunta };
 }
 
 export function tieneOpciones(comida) {

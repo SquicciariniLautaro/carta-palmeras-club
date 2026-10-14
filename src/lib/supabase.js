@@ -22,12 +22,13 @@ export const supabase = createClient(
 export function mensajeDeError(error, porDefecto = "Ocurrió un error. Probá de nuevo.") {
   if (!error) return porDefecto;
   const msj = error.message || "";
+  if (error.visible && msj) return msj; // mensajes armados para mostrar (ej. imágenes)
   if (/failed to fetch|networkerror|load failed/i.test(msj)) {
     return "No pudimos conectarnos. Revisá tu conexión a internet.";
   }
   if (error.code === "23503") return "No se puede borrar porque tiene datos relacionados.";
   if (error.code === "23505") return "Ya existe un registro con ese nombre.";
-  if (error.code === "23514") return "Algún dato no cumple las reglas (revisá precios y stock).";
+  if (error.code === "23514") return "Algún dato no cumple las reglas (revisá los precios).";
   if (error.code === "42501" || /row-level security|permission denied/i.test(msj)) {
     return "No tenés permisos para hacer esto.";
   }

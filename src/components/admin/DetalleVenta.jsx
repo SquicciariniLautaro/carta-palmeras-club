@@ -1,10 +1,12 @@
 import { formatearFechaHora, formatearPrecio } from "../../lib/formato";
+import { IconoBasura, IconoEditar } from "../ui/Iconos";
 import Modal from "../ui/Modal";
-import { ESTADOS } from "./ventasUtils";
+import { BotonCerrar, SelectorEstado } from "./EstadoPedido";
+import { estaAbierto } from "./ventasUtils";
 
-export default function DetalleVenta({ venta, onCerrar, onConfirmar, onCancelar, procesando }) {
+export default function DetalleVenta({ venta, onCerrarModal, onEstado, onCerrarPedido, onEditar, onBorrar, procesando }) {
   return (
-    <Modal abierto={Boolean(venta)} onCerrar={onCerrar} titulo={venta ? `Pedido #${venta.numero}` : ""}>
+    <Modal abierto={Boolean(venta)} onCerrar={onCerrarModal} titulo={venta ? `Pedido #${venta.numero}` : ""}>
       {venta && (
         <div className="space-y-4 text-sm">
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
@@ -12,14 +14,12 @@ export default function DetalleVenta({ venta, onCerrar, onConfirmar, onCancelar,
             <dd>{formatearFechaHora(venta.created_at)}</dd>
             <dt className="text-tinta-suave">Cliente</dt>
             <dd>{venta.cliente_nombre || "—"}</dd>
-            <dt className="text-tinta-suave">Estado</dt>
-            <dd>
-              <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${ESTADOS[venta.estado]?.clase}`}>
-                {ESTADOS[venta.estado]?.nombre}
-              </span>
-            </dd>
             <dt className="text-tinta-suave">Origen</dt>
             <dd>{venta.origen === "manual" ? "Manual (en el local)" : "Web (WhatsApp)"}</dd>
+            <dt className="self-center text-tinta-suave">Estado</dt>
+            <dd>
+              <SelectorEstado venta={venta} onCambiar={onEstado} disabled={procesando} />
+            </dd>
           </dl>
 
           <table className="w-full text-left">
@@ -62,18 +62,19 @@ export default function DetalleVenta({ venta, onCerrar, onConfirmar, onCancelar,
             </div>
           )}
 
-          {venta.estado !== "cancelada" && (
-            <div className="flex flex-wrap justify-end gap-2 border-t border-borde pt-4">
-              <button type="button" className="boton-peligro" onClick={() => onCancelar(venta)} disabled={procesando}>
-                {venta.estado === "confirmada" ? "Cancelar y devolver stock" : "Cancelar pedido"}
+          <div className="space-y-2 border-t border-borde pt-4">
+            {estaAbierto(venta) && <BotonCerrar venta={venta} onCerrar={onCerrarPedido} disabled={procesando} />}
+            <div className="flex flex-wrap justify-end gap-2">
+              <button type="button" className="boton-secundario hover:text-rojo" onClick={() => onBorrar(venta)} disabled={procesando}>
+                <IconoBasura className="size-4" /> Borrar
               </button>
-              {venta.estado === "pendiente" && (
-                <button type="button" className="boton-primario" onClick={() => onConfirmar(venta)} disabled={procesando}>
-                  Confirmar y descontar stock
+              {venta.estado !== "cancelado" && (
+                <button type="button" className="boton-secundario" onClick={() => onEditar(venta)} disabled={procesando}>
+                  <IconoEditar className="size-4" /> Editar
                 </button>
               )}
             </div>
-          )}
+          </div>
         </div>
       )}
     </Modal>

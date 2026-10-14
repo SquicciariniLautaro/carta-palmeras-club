@@ -16,6 +16,7 @@ export default function Carrito({
   onVaciar,
   onEnviar,
   enviando,
+  cerrado, // null si está abierto; si no, "Abrimos hoy a las 20:00 hs"
 }) {
   const [cliente, setCliente] = useState("");
   const [nota, setNota] = useState("");
@@ -264,9 +265,14 @@ export default function Carrito({
                 <span>Total</span>
                 <span>{formatearPrecio(total)}</span>
               </div>
-              <button type="submit" className="boton-whatsapp w-full py-3 text-base" disabled={enviando}>
+              {cerrado && (
+                <p className="rounded-xl bg-brasa/10 px-3 py-2 text-center text-sm font-medium text-brasa">
+                  Estamos cerrados. {cerrado}. Podés dejar armado tu pedido y mandarlo cuando abramos.
+                </p>
+              )}
+              <button type="submit" className="boton-whatsapp w-full py-3 text-base" disabled={enviando || Boolean(cerrado)}>
                 <IconoWhatsApp />
-                {enviando ? "Registrando pedido…" : "Enviar pedido por WhatsApp"}
+                {cerrado ? "Cerrado por ahora" : enviando ? "Registrando pedido…" : "Enviar pedido por WhatsApp"}
               </button>
             </div>
           </form>

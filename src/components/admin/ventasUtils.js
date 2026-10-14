@@ -1,10 +1,57 @@
-import { claveDia, fechaInput, formatearFechaHora } from "../../lib/formato";
+import { claveDia, fechaInput, formatearFechaHora, precioFinal } from "../../lib/formato";
+import { opcionesDe } from "../../lib/opciones";
 
+// Recorrido de un pedido: pendiente → en preparación → enviado → entregado → cerrado.
+// "Cerrado" = entregado y cobrado: solo los cerrados cuentan en la facturación.
 export const ESTADOS = {
-  pendiente: { nombre: "Pendiente", clase: "bg-brasa/15 text-brasa" },
-  confirmada: { nombre: "Confirmada", clase: "bg-palmera/15 text-palmera" },
-  cancelada: { nombre: "Cancelada", clase: "bg-borde text-tinta-suave" },
+  pendiente: { nombre: "Pendiente", clase: "bg-brasa/15 text-brasa border-brasa/40" },
+  en_preparacion: { nombre: "En preparación", clase: "bg-amber-100 text-amber-900 border-amber-300" },
+  enviado: { nombre: "Enviado", clase: "bg-sky-100 text-sky-900 border-sky-300" },
+  entregado: { nombre: "Entregado", clase: "bg-violet-100 text-violet-900 border-violet-300" },
+  cerrado: { nombre: "Cerrado", clase: "bg-emerald-100 text-emerald-900 border-emerald-300" },
+  cancelado: { nombre: "Cancelado", clase: "bg-borde text-tinta-suave border-borde" },
 };
+
+// Pedidos que todavía falta cerrar (se muestran arriba de todo en Ventas)
+export const ESTADOS_ABIERTOS = ["pendiente", "en_preparacion", "enviado", "entregado"];
+
+export function estaAbierto(venta) {
+  return ESTADOS_ABIERTOS.includes(venta.estado);
+}
+
+// Una entrada por comida, o una por variante si la comida las tiene (Simple, Doble…).
+// La usan la venta manual y la edición de pedidos.
+export function entradasDeComidas(comidas) {
+  const lista = [];
+  for (const c of [...comidas].sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))) {
+    const { variantes } = opcionesDe(c);
+    if (variantes.length === 0) {
+      lista.push({ valor: c.id, comida: c, variante: null, nombre: c.nombre, precio: precioFinal(c) });
+    } else {
+      for (const v of variantes) {
+        lista.push({
+          valor: `${c.id}|${v.nombre}`,
+          comida: c,
+          variante: v.nombre,
+          nombre: `${c.nombre} · ${v.nombre}`,
+          precio: v.precio,
+        });
+      }
+    }
+  }
+  return lista;
+}
+
+// "hace 5 min", "hace 2 h 10 min"
+export function tiempoDesde(iso, ahora) {
+  const minutos = Math.max(0, Math.floor((ahora - new Date(iso).getTime()) / 60000));
+  if (minutos < 1) return "recién";
+  if (minutos < 60) return `hace ${minutos} min`;
+  const horas = Math.floor(minutos / 60);
+  if (horas < 24) return `hace ${horas} h${minutos % 60 ? ` ${minutos % 60} min` : ""}`;
+  const dias = Math.floor(horas / 24);
+  return `hace ${dias} día${dias === 1 ? "" : "s"}`;
+}
 
 export const RANGOS = [
   { id: "hoy", nombre: "Hoy" },
@@ -53,11 +100,11 @@ export function unidadesDeVenta(venta) {
   return (venta.venta_items ?? []).reduce((acc, i) => acc + i.cantidad, 0);
 }
 
-// Facturación (solo confirmadas) por día, incluyendo días sin ventas
+// Facturación (solo pedidos cerrados) por día, incluyendo días sin ventas
 export function facturacionPorDia(ventas, desde, hasta) {
   const totales = new Map();
   for (const v of ventas) {
-    if (v.estado !== "confirmada") continue;
+    if (v.estado !== "cerrado") continue;
     const clave = claveDia(v.created_at);
     totales.set(clave, (totales.get(clave) ?? 0) + Number(v.total));
   }
@@ -72,11 +119,11 @@ export function facturacionPorDia(ventas, desde, hasta) {
   return dias;
 }
 
-// Las 5 comidas más vendidas (por unidades) entre las ventas confirmadas
+// Las 5 comidas más vendidas (por unidades) entre los pedidos cerrados
 export function masVendidas(ventas, limite = 5) {
   const porNombre = new Map();
   for (const v of ventas) {
-    if (v.estado !== "confirmada") continue;
+    if (v.estado !== "cerrado") continue;
     for (const item of v.venta_items ?? []) {
       const clave = item.comida_id ?? `nombre:${item.nombre}`;
       const actual = porNombre.get(clave) ?? { nombre: item.nombre, unidades: 0, total: 0 };
