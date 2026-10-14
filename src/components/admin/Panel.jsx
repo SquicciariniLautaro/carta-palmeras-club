@@ -83,7 +83,7 @@ export default function Panel({ sesion }) {
         { id: `pedido-${p.id}`, icon: "🛎️", duration: 20_000 }
       );
       if (document.hidden && avisosDisponibles() && Notification.permission === "granted") {
-        new Notification(`Nuevo pedido #${p.numero}`, { body: texto, icon: "/favicon.png", tag: p.id });
+        new Notification(`Nuevo pedido #${p.numero}`, { body: texto, icon: `${import.meta.env.BASE_URL}favicon.png`, tag: p.id });
       }
     }
   }, []);
@@ -135,7 +135,7 @@ export default function Panel({ sesion }) {
                 🔔 Activar avisos
               </button>
             )}
-            <a href="/" target="_blank" rel="noopener noreferrer" className="boton-secundario px-3 py-2 text-xs">
+            <a href={import.meta.env.BASE_URL} target="_blank" rel="noopener noreferrer" className="boton-secundario px-3 py-2 text-xs">
               Ver catálogo
             </a>
             <button type="button" className="boton-secundario px-3 py-2 text-xs" onClick={cerrarSesion}>

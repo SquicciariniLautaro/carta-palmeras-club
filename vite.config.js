@@ -37,6 +37,8 @@ export default defineConfig(({ mode }) => {
   // Las variables sin VITE_ (claves de Cloudinary) quedan solo del lado del servidor
   Object.assign(process.env, loadEnv(mode, process.cwd(), ""));
   return {
+    // En GitHub Pages el sitio vive en /nombre-del-repo/ (lo define el workflow); en Vercel y local es "/"
+    base: process.env.VITE_BASE || "/",
     plugins: [react(), tailwindcss(), apiLocal()],
     build: {
       rolldownOptions: {

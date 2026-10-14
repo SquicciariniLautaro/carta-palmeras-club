@@ -1,0 +1,53 @@
+# Publica la carta en GitHub Pages cada vez que se sube código a estas ramas.
+# Requiere: Settings → Pages → Source: "GitHub Actions".
+name: Publicar en GitHub Pages
+
+on:
+  push:
+    branches: [main, app-completa-supabase]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+        env:
+          # El sitio vive en https://<usuario>.github.io/<repo>/
+          VITE_BASE: /${{ github.event.repository.name }}/
+          # Estos valores son públicos por diseño (la seguridad está en las reglas RLS de Supabase).
+          # Se pueden cambiar en Settings → Secrets and variables → Actions → Variables.
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || 'https://asudjzqujzsovzlbgkxl.supabase.co' }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY || 'sb_publishable_COCivmL2ZWi6NGo1_GMVkA_andSN0Z7' }}
+          VITE_WHATSAPP_NUMBER: ${{ vars.VITE_WHATSAPP_NUMBER || '5493884131570' }}
+          VITE_INSTAGRAM_URL: ${{ vars.VITE_INSTAGRAM_URL || 'https://www.instagram.com/laspalmeras.club' }}
+      # GitHub Pages no conoce rutas como /admin: devuelve 404.html, que es la misma app
+      - run: cp dist/index.html dist/404.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
