@@ -4,7 +4,7 @@ import { IconoBuscar, IconoCerrar } from "../ui/Iconos";
 export default function Filtros({ categorias, filtro, onFiltro, busqueda, onBusqueda, hayPromos }) {
   const opciones = [
     { id: "todos", nombre: "Todos" },
-    ...(hayPromos ? [{ id: "promos", nombre: "🔥 Promos" }] : []),
+    ...(hayPromos ? [{ id: "promos", nombre: "Promos" }] : []),
     ...categorias.map((c) => ({ id: c.id, nombre: c.nombre })),
   ];
 

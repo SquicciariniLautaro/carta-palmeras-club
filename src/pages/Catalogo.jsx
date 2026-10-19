@@ -19,16 +19,17 @@ import Footer from "../components/catalogo/Footer";
 import Preloader from "../components/catalogo/Preloader";
 import AvisoCerrado from "../components/catalogo/AvisoCerrado";
 
-// Trae categorías, comidas activas y el horario de atención
+// Trae categorías, comidas activas y el horario de atención de la carta (turno noche)
 async function obtenerCatalogo() {
   if (!supabaseConfigurado) throw new Error("Supabase no está configurado.");
   const [cats, comidas, horarios] = await Promise.all([
-    supabase.from("categorias").select("id, nombre, orden").order("orden").order("nombre"),
+    supabase.from("categorias").select("id, nombre, orden").eq("turno", "noche").order("orden").order("nombre"),
     supabase
       .from("comidas")
       .select("id, nombre, descripcion, precio, precio_promo, categoria_id, imagen_url, destacado, opciones")
-      .eq("activo", true),
-    supabase.from("horarios").select("dia, abierto, desde, hasta"),
+      .eq("activo", true)
+      .eq("turno", "noche"),
+    supabase.from("horarios").select("dia, abierto, desde, hasta").eq("turno", "noche"),
   ]);
   if (cats.error) throw cats.error;
   if (comidas.error) throw comidas.error;
@@ -94,7 +95,7 @@ function CatalogoContenido() {
       const { items, cambios } = revalidarCarrito(itemsActuales, porId);
       if (cambios.length > 0) {
         reemplazar(items);
-        toast(cambios.join("\n"), { icon: "🛒", duration: 6000 });
+        toast(cambios.join("\n"), { duration: 6000 });
       }
     },
     [reemplazar]
@@ -207,7 +208,7 @@ function CatalogoContenido() {
 
   function eliminar(linea) {
     carrito.eliminar(linea.clave);
-    toast(`Sacaste ${linea.comida.nombre}`, { icon: "🗑️" });
+    toast(`Sacaste ${linea.comida.nombre}`);
   }
 
   const personalizando = personalizandoId ? comidasPorId.get(personalizandoId) : null;
@@ -225,7 +226,7 @@ function CatalogoContenido() {
     abrirWhatsApp(linkWhatsApp(mensajeConsulta(comida)));
   }
 
-  async function enviarPedido({ cliente, nota, entrega, direccion }) {
+  async function enviarPedido({ cliente, telefono, nota, entrega, direccion }) {
     if (lineas.length === 0) return false;
     if (!local.abierto) {
       toast.error(`Ahora estamos cerrados. ${textoApertura(local)}.`);
@@ -245,6 +246,7 @@ function CatalogoContenido() {
     const { data, error } = await supabase.rpc("crear_pedido", {
       items: lineas.map((l) => itemParaPedido(l.comida.id, l.cantidad, l.config)),
       cliente_nombre: cliente || null,
+      cliente_telefono: telefono || null,
       nota: notaParaRegistro({ nota, entrega, direccion }) || null,
     });
     setEnviando(false);
@@ -295,7 +297,7 @@ function CatalogoContenido() {
 
         {estado === "error" ? (
           <div className="tarjeta mx-auto my-10 max-w-md p-6 text-center">
-            <p className="text-lg font-semibold">Uy, no pudimos cargar el menú 😕</p>
+            <p className="text-lg font-semibold">No pudimos cargar el menú</p>
             <p className="mt-1 text-sm text-tinta-suave">
               Revisá tu conexión e intentá de nuevo. Si sigue fallando, escribinos por WhatsApp.
             </p>
@@ -327,8 +329,7 @@ function CatalogoContenido() {
               </div>
             ) : visibles.length === 0 ? (
               <div className="py-16 text-center text-tinta-suave">
-                <p className="text-4xl">🥥</p>
-                <p className="mt-2 font-medium text-tinta">
+                <p className="font-medium text-tinta">
                   {comidas.length === 0 ? "Todavía no hay comidas cargadas." : "No encontramos nada con ese filtro."}
                 </p>
                 {(busqueda || filtro !== "todos") && (
@@ -399,7 +400,7 @@ function CatalogoContenido() {
         onEliminar={eliminar}
         onVaciar={() => {
           carrito.vaciar();
-          toast("Vaciaste el pedido", { icon: "🧺" });
+          toast("Vaciaste el pedido");
         }}
         onEnviar={enviarPedido}
         enviando={enviando}

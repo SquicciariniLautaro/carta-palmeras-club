@@ -70,7 +70,7 @@ function FilaCategoria({ categoria, cantidad, esPrimera, esUltima, onRenombrar, 
   );
 }
 
-export default function Categorias({ categorias, comidas, onCambio }) {
+export default function Categorias({ turno = "noche", categorias, comidas, onCambio }) {
   const [nueva, setNueva] = useState("");
   const [creando, setCreando] = useState(false);
   const [aBorrar, setABorrar] = useState(null);
@@ -83,7 +83,7 @@ export default function Categorias({ categorias, comidas, onCambio }) {
     if (!nombre) return;
     setCreando(true);
     const orden = categorias.reduce((max, c) => Math.max(max, c.orden), 0) + 1;
-    const { error } = await supabase.from("categorias").insert({ nombre, orden });
+    const { error } = await supabase.from("categorias").insert({ nombre, orden, turno });
     setCreando(false);
     if (error) {
       toast.error(mensajeDeError(error, "No se pudo crear la categoría."));
@@ -137,7 +137,9 @@ export default function Categorias({ categorias, comidas, onCambio }) {
       <div>
         <h1 className="text-xl font-semibold">Categorías</h1>
         <p className="text-sm text-tinta-suave">
-          El orden de esta lista es el orden de los filtros del catálogo. Solo se pueden borrar categorías sin comidas.
+          {turno === "noche"
+            ? "El orden de esta lista es el orden de los filtros del catálogo. Solo se pueden borrar categorías sin comidas."
+            : "Categorías del menú del mediodía (por ejemplo: Platos del día, Minutas, Postres). Solo se pueden borrar si no tienen platos."}
         </p>
       </div>
 
@@ -148,7 +150,7 @@ export default function Categorias({ categorias, comidas, onCambio }) {
         <input
           id="nueva-cat"
           className="campo"
-          placeholder="Nueva categoría (ej.: Lomitos)"
+          placeholder={turno === "noche" ? "Nueva categoría (ej.: Lomitos)" : "Nueva categoría (ej.: Platos del día)"}
           value={nueva}
           maxLength={60}
           onChange={(e) => setNueva(e.target.value)}

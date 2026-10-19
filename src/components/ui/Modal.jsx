@@ -15,7 +15,9 @@ export default function Modal({ abierto, onCerrar, titulo, children, ancho = "ma
   return (
     <dialog
       ref={ref}
-      onClose={onCerrar}
+      // React propaga "close" por el árbol: sin este chequeo, cerrar un diálogo
+      // abierto adentro (por ejemplo una confirmación) cerraría también este
+      onClose={(e) => e.target === ref.current && onCerrar()}
       onClick={(e) => {
         // Click en el fondo oscuro (fuera del contenido) cierra
         if (e.target === ref.current) onCerrar();

@@ -2,9 +2,9 @@
 
 > **¿Primera vez?** Seguí la [guía paso a paso para conectar Supabase](GUIA-SUPABASE.md).
 
-Catálogo público donde los clientes arman su pedido y lo mandan por WhatsApp, más un panel privado (`/admin`) para cargar comidas, seguir los pedidos hasta cerrarlos y ver el historial de ventas.
+Catálogo público donde los clientes arman su pedido y lo mandan por WhatsApp, más un panel privado (`/admin`) para administrar el negocio: venta noche (la carta) y venta mediodía (uso interno), cobros en efectivo, transferencia o cuenta corriente, caja con arqueos, cuentas corrientes de clientes, gastos y costos, finanzas, tickets para la ticketera y reportes en Excel para el contador.
 
-**Stack:** React 19 + Vite · Tailwind CSS v4 · React Router · Supabase (Postgres, Auth, RLS) · Cloudinary (fotos en WebP) · Recharts · react-hot-toast · Vercel.
+**Stack:** React 19 + Vite · Tailwind CSS v4 · React Router · Supabase (Postgres, Auth, RLS) · Cloudinary (fotos en WebP) · Recharts · ExcelJS · react-hot-toast · Vercel.
 
 Casi no hay backend propio: el navegador habla directo con Supabase usando la clave **anónima**. La seguridad la ponen las políticas RLS y las funciones RPC de `supabase/schema.sql` (los precios del pedido se calculan siempre en la base). Lo único del lado del servidor es `api/cloudinary.js`, una función de Vercel que firma las subidas de fotos y borra las viejas (solo para administradores), para que la clave secreta de Cloudinary nunca llegue al navegador.
 
@@ -19,14 +19,17 @@ src/
   App.jsx                  rutas: /, /admin (carga diferida) y redirección
   index.css                Tailwind + colores de marca en @theme
   config.js                nombre, WhatsApp, Instagram y límites
-  lib/                     supabase.js, formato.js, whatsapp.js, imagenes.js, opciones.js, opcionesForm.js
-  hooks/                   useSesion.js, useCarrito.js
+  lib/                     supabase.js, formato.js, whatsapp.js, imagenes.js, opciones.js, opcionesForm.js,
+                           impresion.js (ticketera), excel.js y reportes.js (planillas), mensajesCliente.js
+  hooks/                   useSesion.js, useCarrito.js, usePedidosEnVivo.js, useCaja.js
   pages/                   Catalogo.jsx, Admin.jsx
   components/catalogo/     Navbar, Filtros, TarjetaProducto, DetalleProducto, Carrito,
                            CarritoProvider, ControlCantidad, Precio, BotonFlotante, Footer, Preloader
-  components/admin/        Login, Panel, ListaComidas, FormComida, OpcionesComida, SubirImagen, Categorias,
-                           HistorialVentas, PedidosAbiertos, EstadoPedido, DetalleVenta, EditarVenta,
-                           VentaManual, GraficoVentas, ventasUtils
+  components/admin/        Login, Panel, Turno (venta noche / mediodía), VentasTurno, TableroPedidos,
+                           DetalleVenta, EditarVenta, VentaLocal, CobrarVenta, FormPagos, AvisoCliente,
+                           MenuDia, ListaComidas, FormComida, OpcionesComida, SubirImagen, Categorias,
+                           Horarios, Caja, CuentasCorrientes, Gastos, Finanzas, ConfigImpresora,
+                           CajaProvider, EstadoPedido, GraficoVentas, ventasUtils, pagosUtils
   components/ui/           Logo, Modal, Confirmar, Cargando, Iconos
 ```
 
@@ -38,7 +41,7 @@ src/
 ## 1. Crear la base en Supabase
 
 1. Creá un proyecto nuevo en Supabase (región más cercana: São Paulo).
-2. Andá a **SQL Editor → New query**, pegá todo `supabase/schema.sql` y tocá **Run**. Crea las tablas, las funciones, las políticas RLS, el bucket `comidas` (solo para las fotos viejas) y el menú inicial (categorías y productos del menú impreso). Se puede volver a correr sin romper nada; en una base existente también migra a esta versión (saca el stock, pasa los estados de los pedidos y une las napolitanas).
+2. Andá a **SQL Editor → New query**, pegá todo `supabase/schema.sql` y tocá **Run**. **Si ya tenías la base de la versión anterior, volvé a correrlo entero**: agrega turnos, cobros, caja, gastos y cuentas corrientes sin perder datos (borra los pedidos cancelados). Crea las tablas, las funciones, las políticas RLS, el bucket `comidas` (solo para las fotos viejas) y el menú inicial (categorías y productos del menú impreso). Se puede volver a correr sin romper nada; en una base existente también migra a esta versión (saca el stock, pasa los estados de los pedidos y une las napolitanas).
 3. **Desactivá el registro público:** Authentication → Sign In / Providers → desactivá **"Allow new users to sign up"**. Así nadie más puede crearse una cuenta.
 4. **Creá el usuario del dueño:** Authentication → Users → **Add user → Create new user**, con correo y contraseña (marcá "Auto Confirm User").
 5. **Hacelo administrador:** en el SQL Editor corré (con su correo):
@@ -87,13 +90,31 @@ npm run preview   # sirve dist/ para probar el build
 
 ## Cómo funciona
 
-**Pedido web:** el cliente arma el carrito (se guarda en el navegador y se revalida contra las opciones actuales al entrar), opcionalmente pone nombre y nota, y toca "Enviar pedido por WhatsApp". La app llama a `crear_pedido`, que toma los precios de la base, valida límites (máx. 30 productos distintos, 50 unidades por producto, 100 por pedido, 20 pedidos web por minuto) y guarda la venta como **pendiente**. Después se abre WhatsApp con el mensaje y el número de pedido. No se maneja stock: lo que no hay se desactiva.
+**Dos ventas separadas:** el panel tiene **Venta noche** (la carta online: pedidos por WhatsApp y ventas en caja de la noche) y **Venta mediodía** (menú del mediodía, solo de uso interno: no aparece en la carta y sus platos no llevan foto). Cada una tiene sus ventas, comidas, categorías y horarios; el mediodía suma el **Menú del día**, un cronograma semanal de qué platos salen cada día. Las categorías, comidas, ventas y horarios tienen la columna `turno` (`noche` / `mediodia`).
 
-**Pedidos:** estados `pendiente → en_preparacion → enviado → entregado → cerrado` (o `cancelado`), elegibles desde un menú desplegable. **Cerrado** = entregado y cobrado: solo esos cuentan en la facturación. Los pedidos sin cerrar (de cualquier fecha) se muestran arriba de todo en Ventas, con un botón grande para cerrarlos y una confirmación que muestra el total a cobrar. Cada pedido se puede **editar** (`editar_venta`: cantidades, sumar o sacar productos, cliente y nota; lo que ya estaba conserva su precio) o **borrar**. Las **ventas manuales** quedan cerradas al registrarse.
+**Pedido web:** el cliente arma el carrito, pone su nombre, su **WhatsApp** (obligatorio, para poder confirmarle el pedido) y la entrega, y toca "Enviar pedido por WhatsApp". `crear_pedido` toma los precios de la base, valida límites (máx. 30 productos distintos, 50 unidades por producto, 100 por pedido, 20 pedidos web por minuto) y guarda la venta como **nueva**. Solo acepta comidas activas de la noche.
 
-**Pedidos en vivo:** `usePedidosEnVivo` escucha la tabla `ventas` con Supabase Realtime (y revisa cada 30 s por las dudas). Con un pedido web nuevo suena un aviso (`lib/sonido.js`), aparece un toast y, si la pestaña no está a la vista y se dieron permisos, una notificación del navegador. La pestaña Ventas muestra el contador de pedidos sin cerrar.
+**Tablero de pedidos:** una columna por estado (`pendiente → en_preparacion → enviado → entregado`), cada pedido avanza con un solo botón y cada estado tiene su animación (los nuevos laten, en preparación muestra una barra en movimiento, en camino una moto que va y viene, entregado hace brillar el botón de cobrar). Los pedidos demorados se marcan en rojo y una franja arriba del panel avisa los pedidos nuevos sin confirmar. Al **confirmar** un pedido web se imprime la comanda (si está configurado) y se abre el mensaje para el cliente. Los pedidos **cancelados se eliminan** (un trigger también borra cualquier venta que pase a `cancelado`).
 
-**Horario de atención:** tabla `horarios` (un turno por día, hora de Argentina; si `desde > hasta` cruza la medianoche, si son iguales es todo el día). `crear_pedido` rechaza pedidos cuando `local_abierto()` da falso, y la carta muestra el cartel de cerrado y bloquea el botón (`lib/horarios.js`, misma regla). Se edita en el panel, pestaña Horarios.
+**Respuestas al cliente:** desde cada pedido web se abre WhatsApp en el chat del cliente con el mensaje escrito: *pedido recibido*, *pedido confirmado* (con tiempo estimado) o *en camino / listo para retirar*. Se puede editar antes de enviarlo.
+
+**Cobros (cerrar cuenta):** una venta solo pasa a `cerrado` (cobrada) registrando cómo se pagó: efectivo (con cálculo de vuelto), transferencia, cuenta corriente o una combinación (`cobrar_venta`, tabla `pagos`). Efectivo y transferencia necesitan la caja abierta. Una venta cobrada no se edita: primero se anula el cobro (`anular_cobro`), salvo que ya esté en un arqueo cerrado. Las **ventas en caja** (`registrar_venta_local`) se cobran en el momento o quedan como cuenta abierta (mesa) en el tablero.
+
+**Caja:** cada apertura es un arqueo (`abrir_caja`, solo uno abierto). Muestra el efectivo que tiene que haber (inicial + ventas en efectivo + pagos de cuentas corrientes + ingresos − retiros − gastos pagados con la caja), lo vendido por forma de pago y por turno, y los movimientos. Se cierra con el conteo de billetes (`cerrar_caja`): queda guardado con una copia de los totales, la diferencia (faltante o sobrante) y se imprime. **Un arqueo cerrado no se puede editar** (lo bloquean triggers, también sus cobros, movimientos y gastos); si hubo un error se borra, y sus cobros se pueden sumar a la próxima caja.
+
+**Cuentas corrientes:** clientes con DNI/CUIT, teléfono y límite de crédito opcional. Estado de cuenta con debe, haber y saldo, y la comanda de cada consumo. Se registran pagos parciales o se **cierra la cuenta** cobrando el saldo completo (`cobrar_cuenta_corriente`). Vista `clientes_saldos`.
+
+**Gastos y costos:** categorías contables, costo fijo o variable, proveedor, comprobante, pagado o pendiente (con vencimiento y aviso de vencidos) y si se pagó con la plata de la caja.
+
+**Finanzas:** ganancia del período (ventas − gastos), dinero que entró y que quedó, por cobrar, por pagar y **libre para gastar** (lo cobrado menos lo pagado y menos las facturas pendientes), con gráfico y explicación de cada número.
+
+**Excel para el contador:** cada sección descarga su planilla `.xlsx` (ventas, detalle de productos, arqueos, cuentas corrientes, estado de cuenta, gastos) y Finanzas arma el **reporte contable** completo en un solo archivo (resumen, ventas, productos, cobros, gastos, arqueos y cuentas corrientes), con importes en pesos, fechas reales, filtros y totales con fórmula. ExcelJS se descarga recién al exportar.
+
+**Ticketera:** botón *Ticketera* en el panel. Imprime la **comanda** para la cocina (grande, sin precios), el **ticket** del cliente (no fiscal) y el **resumen del arqueo**, en papel de 80 o 58 mm. Se puede imprimir la comanda sola al llegar cada pedido web y/o al confirmarlo. Para que salga directo sin el cuadro de diálogo: dejar la ticketera como impresora predeterminada de Windows y abrir el panel con un acceso directo de Chrome con `--kiosk-printing`.
+
+**Pedidos en vivo:** `usePedidosEnVivo` escucha la tabla `ventas` con Supabase Realtime (y revisa cada 30 s por las dudas). Con un pedido web nuevo suena un aviso (`lib/sonido.js`), aparece un aviso en el panel y, si la pestaña no está a la vista y se dieron permisos, una notificación del navegador.
+
+**Horario de atención:** tabla `horarios` (un horario por turno y por día, hora de Argentina; el de la noche es el que controla la carta; si `desde > hasta` cruza la medianoche, si son iguales es todo el día). `crear_pedido` rechaza pedidos cuando `local_abierto()` da falso, y la carta muestra el cartel de cerrado y bloquea el botón (`lib/horarios.js`, misma regla). Se edita en el panel, pestaña Horarios.
 
 **Imágenes:** se achican a 1200 px y se comprimen en el navegador, se suben a Cloudinary con una firma que da `api/cloudinary.js` (con `format=webp`, así siempre quedan en WebP) y se borra la anterior al reemplazarla o al borrar la comida. En la carta se piden recortadas con `c_fill,g_auto` (la comida queda centrada) al tamaño de cada recuadro.
 

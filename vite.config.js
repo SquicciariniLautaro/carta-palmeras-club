@@ -41,6 +41,9 @@ export default defineConfig(({ mode }) => {
     base: process.env.VITE_BASE || "/",
     plugins: [react(), tailwindcss(), apiLocal()],
     build: {
+      // ExcelJS (~930 kB) va en un archivo aparte que solo se descarga al exportar
+      // un Excel desde el panel; el resto de los archivos queda debajo de 500 kB.
+      chunkSizeWarningLimit: 1000,
       rolldownOptions: {
         output: {
           // Separamos las librerías grandes en archivos propios: se cachean

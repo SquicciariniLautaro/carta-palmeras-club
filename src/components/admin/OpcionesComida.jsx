@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { IconoBasura, IconoCerrar, IconoMas } from "../ui/Iconos";
+import { IconoBasura, IconoCerrar, IconoCheck, IconoMas } from "../ui/Iconos";
 import { normalizarTexto } from "../../lib/formato";
 import { LARGO_PREGUNTA, PREGUNTA_POR_DEFECTO } from "../../lib/opciones";
 import {
@@ -118,7 +118,7 @@ function IngredientesQuitar({ valor, descripcion, onCambio, error }) {
                       : "border-borde bg-papel text-tinta-suave line-through hover:bg-borde"
                   }`}
                 >
-                  {marcado ? "✓ " : ""}
+                  {marcado && <IconoCheck className="mr-1 inline size-3.5" />}
                   {ingrediente}
                 </button>
               </li>
@@ -127,7 +127,7 @@ function IngredientesQuitar({ valor, descripcion, onCambio, error }) {
           {manuales.map((ingrediente) => (
             <li key={`manual-${normalizarTexto(ingrediente)}`}>
               <span className="inline-flex items-center gap-1 rounded-full border border-palmera bg-palmera/10 py-1.5 pl-3 pr-1.5 text-xs font-medium">
-                ✓ {ingrediente}
+                <IconoCheck className="size-3.5" /> {ingrediente}
                 <button
                   type="button"
                   className="rounded-full p-0.5 text-tinta-suave hover:bg-borde hover:text-brasa"

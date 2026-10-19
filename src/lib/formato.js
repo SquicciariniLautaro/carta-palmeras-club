@@ -57,3 +57,42 @@ export function fechaInput(fecha) {
 export function claveDia(fecha) {
   return fechaInput(fecha);
 }
+
+const formatoPesos = new Intl.NumberFormat("es-AR", {
+  style: "currency",
+  currency: "ARS",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+// 12000.5 → "$ 12.000,50" (para caja, arqueos y reportes)
+export function formatearPesos(numero) {
+  return formatoPesos.format(Number(numero) || 0);
+}
+
+const formatoFecha = new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
+const formatoHora = new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit" });
+
+// Acepta un ISO, un Date o una fecha "2026-10-16" (sin hora: se toma como día local)
+function aFecha(valor) {
+  if (typeof valor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(valor)) {
+    const [a, m, d] = valor.split("-").map(Number);
+    return new Date(a, m - 1, d);
+  }
+  return new Date(valor);
+}
+
+// "16/10/2026"
+export function formatearFecha(valor) {
+  return formatoFecha.format(aFecha(valor));
+}
+
+// "21:34"
+export function formatearHora(valor) {
+  return formatoHora.format(new Date(valor));
+}
+
+// 0.256 → "25,6 %"
+export function formatearPorcentaje(valor) {
+  return `${(Number(valor) * 100).toLocaleString("es-AR", { maximumFractionDigits: 1 })} %`;
+}

@@ -52,7 +52,8 @@ function validar(v) {
   return errores;
 }
 
-export default function FormComida({ comida, categorias, onCerrar, onGuardado }) {
+export default function FormComida({ comida, categorias, turno = "noche", onCerrar, onGuardado }) {
+  const conCarta = turno === "noche";
   const [v, setV] = useState(() => valoresIniciales(comida, categorias));
   const [errores, setErrores] = useState({});
   const [archivo, setArchivo] = useState(null); // imagen nueva elegida
@@ -129,7 +130,7 @@ export default function FormComida({ comida, categorias, onCerrar, onGuardado })
   }
 
   return (
-    <Modal abierto onCerrar={guardando ? () => {} : onCerrar} titulo={comida ? "Editar comida" : "Nueva comida"} ancho="max-w-2xl">
+    <Modal abierto onCerrar={guardando ? () => {} : onCerrar} titulo={conCarta ? (comida ? "Editar comida" : "Nueva comida") : comida ? "Editar plato del mediodía" : "Nuevo plato del mediodía"} ancho="max-w-2xl">
       <form onSubmit={guardar} className="space-y-4" noValidate>
         <div>
           <label htmlFor="f-nombre" className="etiqueta">
@@ -217,17 +218,19 @@ export default function FormComida({ comida, categorias, onCerrar, onGuardado })
         />
 
         <div className="flex flex-wrap gap-6">
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" className="size-4 accent-palmera" checked={v.destacado} onChange={cambiar("destacado")} />
-            Destacado (aparece primero)
-          </label>
+          {conCarta && (
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" className="size-4 accent-palmera" checked={v.destacado} onChange={cambiar("destacado")} />
+              Destacado (aparece primero)
+            </label>
+          )}
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" className="size-4 accent-palmera" checked={v.activo} onChange={cambiar("activo")} />
-            Activo (visible en el catálogo)
+            {conCarta ? "Activo (visible en el catálogo)" : "Disponible para vender"}
           </label>
         </div>
 
-        <SubirImagen
+        {conCarta && <SubirImagen
           urlActual={quitarImagen ? null : comida?.imagen_url}
           archivo={archivo}
           onArchivo={(f) => {
@@ -238,14 +241,14 @@ export default function FormComida({ comida, categorias, onCerrar, onGuardado })
             setArchivo(null);
             setQuitarImagen(true);
           }}
-        />
+        />}
 
         <div className="flex justify-end gap-2 border-t border-borde pt-4">
           <button type="button" className="boton-secundario" onClick={onCerrar} disabled={guardando}>
             Cancelar
           </button>
           <button type="submit" className="boton-primario" disabled={guardando}>
-            {guardando ? "Guardando…" : comida ? "Guardar cambios" : "Crear comida"}
+            {guardando ? "Guardando…" : comida ? "Guardar cambios" : conCarta ? "Crear comida" : "Crear plato"}
           </button>
         </div>
       </form>

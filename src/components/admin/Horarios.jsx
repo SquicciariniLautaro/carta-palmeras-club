@@ -4,24 +4,26 @@ import { supabase, mensajeDeError } from "../../lib/supabase";
 import { DIAS, ORDEN_SEMANA, estadoLocal, hhmm, textoApertura } from "../../lib/horarios";
 import { IconoReloj } from "../ui/Iconos";
 
-function filasIniciales(horarios) {
+function filasIniciales(horarios, turno) {
   const porDia = new Map(horarios.map((h) => [h.dia, h]));
   return ORDEN_SEMANA.map((dia) => {
     const h = porDia.get(dia);
-    return { dia, abierto: h?.abierto ?? true, desde: hhmm(h?.desde ?? "00:00"), hasta: hhmm(h?.hasta ?? "00:00") };
+    return { turno, dia, abierto: h?.abierto ?? true, desde: hhmm(h?.desde ?? "00:00"), hasta: hhmm(h?.hasta ?? "00:00") };
   });
 }
 
-// Horario de atención: fuera de horario la carta no deja mandar pedidos
-export default function Horarios({ horarios, onCambio }) {
-  const [filas, setFilas] = useState(() => filasIniciales(horarios));
+// Horario de atención de cada turno. El de la noche controla la carta: fuera de
+// horario no deja mandar pedidos. El del mediodía es informativo.
+export default function Horarios({ turno = "noche", horarios, onCambio }) {
+  const conCarta = turno === "noche";
+  const [filas, setFilas] = useState(() => filasIniciales(horarios, turno));
   const [guardando, setGuardando] = useState(false);
 
   // Si los horarios cambian desde afuera (al recargar), se vuelven a cargar
   const [origen, setOrigen] = useState(horarios);
   if (horarios !== origen) {
     setOrigen(horarios);
-    setFilas(filasIniciales(horarios));
+    setFilas(filasIniciales(horarios, turno));
   }
 
   const cambiar = (dia, campo, valor) => setFilas((prev) => prev.map((f) => (f.dia === dia ? { ...f, [campo]: valor } : f)));
@@ -37,7 +39,7 @@ export default function Horarios({ horarios, onCambio }) {
       return;
     }
     setGuardando(true);
-    const { error } = await supabase.from("horarios").upsert(filas);
+    const { error } = await supabase.from("horarios").upsert(filas, { onConflict: "turno,dia" });
     setGuardando(false);
     if (error) {
       toast.error(mensajeDeError(error, "No se pudo guardar el horario."));
@@ -52,9 +54,11 @@ export default function Horarios({ horarios, onCambio }) {
   return (
     <section className="max-w-2xl space-y-4">
       <div>
-        <h1 className="text-xl font-semibold">Horario de atención</h1>
+        <h1 className="text-xl font-semibold">{conCarta ? "Horario de la noche" : "Horario del mediodía"}</h1>
         <p className="text-sm text-tinta-suave">
-          Fuera de este horario la carta se puede mirar, pero no se pueden mandar pedidos. Hora de Argentina.
+          {conCarta
+            ? "Fuera de este horario la carta se puede mirar, pero no se pueden mandar pedidos. Hora de Argentina."
+            : "Horario del servicio del mediodía. Es informativo: no afecta a la carta online. Hora de Argentina."}
         </p>
       </div>
 
@@ -64,7 +68,13 @@ export default function Horarios({ horarios, onCambio }) {
         }`}
       >
         <IconoReloj className="size-4" />
-        {ahora.abierto ? "Ahora la carta está recibiendo pedidos." : `Ahora la carta figura cerrada. ${textoApertura(ahora)}.`}
+        {conCarta
+          ? ahora.abierto
+            ? "Ahora la carta está recibiendo pedidos."
+            : `Ahora la carta figura cerrada. ${textoApertura(ahora)}.`
+          : ahora.abierto
+            ? "Ahora es horario del mediodía."
+            : `Fuera del horario del mediodía. ${textoApertura(ahora).replace("Abrimos", "Abre")}.`}
       </p>
 
       <ul className="tarjeta divide-y divide-borde">
@@ -115,8 +125,8 @@ export default function Horarios({ horarios, onCambio }) {
 
       <ul className="list-disc space-y-1 pl-5 text-xs text-tinta-suave">
         <li>Si cierran después de medianoche, poné por ejemplo 20:00 a 01:00: se entiende que cierra al día siguiente.</li>
-        <li>Con la misma hora en los dos campos, ese día se toman pedidos todo el día.</li>
-        <li>Destildá un día para no tomar pedidos.</li>
+        <li>Con la misma hora en los dos campos, ese día queda abierto todo el día.</li>
+        <li>Destildá un día para marcarlo cerrado.</li>
       </ul>
 
       <div className="flex justify-end">

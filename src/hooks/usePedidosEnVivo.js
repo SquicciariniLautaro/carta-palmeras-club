@@ -5,10 +5,10 @@ import { ESTADOS_ABIERTOS } from "../components/admin/ventasUtils";
 // Respaldo por si el tiempo real se corta: se revisa igual cada tanto
 const CADA_MS = 30_000;
 
-// Mantiene al día los pedidos sin cerrar del panel:
+// Mantiene al día los pedidos sin cobrar del panel:
 //   - se entera al instante por Supabase Realtime (y cada 30 s por las dudas),
 //   - avisa con onNuevo(pedidos) cuando entra un pedido web nuevo,
-//   - "version" cambia cada vez que hay cambios, para que Ventas se recargue sola.
+//   - "version" cambia cada vez que hay cambios, para que las ventas se recarguen solas.
 export function usePedidosEnVivo(onNuevo) {
   const [abiertos, setAbiertos] = useState([]);
   const [version, setVersion] = useState(0);
@@ -19,11 +19,11 @@ export function usePedidosEnVivo(onNuevo) {
     avisar.current = onNuevo;
   });
 
-  // forzar = vino un cambio por tiempo real: Ventas se recarga aunque no cambien los abiertos
+  // forzar = vino un cambio por tiempo real: las ventas se recargan aunque no cambien los abiertos
   const revisar = useCallback((forzar = false) => {
     return supabase
       .from("ventas")
-      .select("id, numero, estado, cliente_nombre, total, origen")
+      .select("id, numero, estado, cliente_nombre, total, origen, turno, created_at")
       .in("estado", ESTADOS_ABIERTOS)
       .order("created_at", { ascending: true })
       .then(({ data, error }) => {
