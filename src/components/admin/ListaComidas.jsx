@@ -25,7 +25,8 @@ function Interruptor({ activo, onCambiar, etiqueta }) {
   );
 }
 
-export default function ListaComidas({ comidas, categorias, cargando, onCambio }) {
+export default function ListaComidas({ turno = "noche", comidas, categorias, cargando, onCambio }) {
+  const conCarta = turno === "noche";
   const [busqueda, setBusqueda] = useState("");
   const [categoriaFiltro, setCategoriaFiltro] = useState("");
   const [editando, setEditando] = useState(null); // null | "nueva" | comida
@@ -73,7 +74,16 @@ export default function ListaComidas({ comidas, categorias, cargando, onCambio }
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">Comidas ({comidas.length})</h1>
+        <div>
+          <h1 className="text-xl font-semibold">
+            {conCarta ? "Comidas de la carta" : "Platos del mediodía"} ({comidas.length})
+          </h1>
+          <p className="text-sm text-tinta-suave">
+            {conCarta
+              ? "Son las que se ven en la carta online. Las inactivas quedan ocultas."
+              : "Uso interno: no aparecen en la carta online y no llevan foto."}
+          </p>
+        </div>
         <button
           type="button"
           className="boton-primario"
@@ -81,7 +91,7 @@ export default function ListaComidas({ comidas, categorias, cargando, onCambio }
           disabled={categorias.length === 0}
           title={categorias.length === 0 ? "Primero creá una categoría" : undefined}
         >
-          <IconoMas className="size-4" /> Nueva comida
+          <IconoMas className="size-4" /> {conCarta ? "Nueva comida" : "Nuevo plato"}
         </button>
       </div>
 
@@ -114,18 +124,20 @@ export default function ListaComidas({ comidas, categorias, cargando, onCambio }
 
       {filtradas.length === 0 ? (
         <div className="tarjeta p-8 text-center text-tinta-suave">
-          {comidas.length === 0 ? "Todavía no cargaste comidas. ¡Creá la primera!" : "No hay comidas con ese filtro."}
+          {comidas.length === 0 ? (conCarta ? "Todavía no cargaste comidas." : "Todavía no cargaste platos del mediodía. Creá una categoría y después los platos.") : "No hay comidas con ese filtro."}
         </div>
       ) : (
         <ul className="space-y-2">
           {filtradas.map((c) => (
             <li
               key={c.id}
-              className={`tarjeta grid grid-cols-[56px_1fr] items-center gap-x-3 gap-y-3 p-3 lg:grid-cols-[56px_minmax(0,1fr)_160px_120px_90px_auto] ${
-                c.activo ? "" : "opacity-60"
-              }`}
+              className={`tarjeta grid items-center gap-x-3 gap-y-3 p-3 ${
+                conCarta
+                  ? "grid-cols-[56px_1fr] lg:grid-cols-[56px_minmax(0,1fr)_160px_120px_90px_auto]"
+                  : "grid-cols-1 lg:grid-cols-[minmax(0,1fr)_160px_110px_auto]"
+              } ${c.activo ? "" : "opacity-60"}`}
             >
-              {c.imagen_url ? (
+              {!conCarta ? null : c.imagen_url ? (
                 <img
                   src={urlImagen(c.imagen_url, { ancho: 112, proporcion: "1:1" })}
                   alt={c.nombre}
@@ -155,6 +167,7 @@ export default function ListaComidas({ comidas, categorias, cargando, onCambio }
                 )}
               </div>
 
+              {conCarta && (
               <label className="flex items-center gap-2 text-xs text-tinta-suave">
                 <Interruptor
                   activo={c.destacado}
@@ -165,19 +178,26 @@ export default function ListaComidas({ comidas, categorias, cargando, onCambio }
                 />
                 Destacado
               </label>
+              )}
 
               <label className="flex items-center gap-2 text-xs text-tinta-suave">
                 <Interruptor
                   activo={c.activo}
                   etiqueta={`Activo: ${c.nombre}`}
                   onCambiar={() =>
-                    actualizar(c, { activo: !c.activo }, c.activo ? "Oculta en el catálogo" : "Visible en el catálogo")
+                    actualizar(
+                      c,
+                      { activo: !c.activo },
+                      conCarta
+                        ? c.activo ? "Oculta en el catálogo" : "Visible en el catálogo"
+                        : c.activo ? "Marcado como no disponible" : "Disponible para vender"
+                    )
                   }
                 />
-                Activo
+                {conCarta ? "Activo" : "Disponible"}
               </label>
 
-              <div className="col-span-2 flex justify-end gap-2 lg:col-span-1">
+              <div className={`flex justify-end gap-2 lg:col-span-1 ${conCarta ? "col-span-2" : ""}`}>
                 <button type="button" className="boton-secundario px-3 py-2" onClick={() => setEditando(c)}>
                   <IconoEditar className="size-4" /> Editar
                 </button>
@@ -199,6 +219,7 @@ export default function ListaComidas({ comidas, categorias, cargando, onCambio }
         <FormComida
           comida={editando === "nueva" ? null : editando}
           categorias={categorias}
+          turno={turno}
           onCerrar={() => setEditando(null)}
           onGuardado={() => {
             setEditando(null);
@@ -210,7 +231,7 @@ export default function ListaComidas({ comidas, categorias, cargando, onCambio }
       <Confirmar
         abierto={Boolean(aBorrar)}
         titulo="Borrar comida"
-        mensaje={`¿Seguro que querés borrar "${aBorrar?.nombre ?? ""}"? También se borra su imagen. Las ventas anteriores se conservan. Si solo querés ocultarla (por ejemplo, si hoy no hay), desactivala.`}
+        mensaje={`¿Seguro que querés borrar "${aBorrar?.nombre ?? ""}"?${conCarta ? " También se borra su imagen." : " También sale del cronograma del menú."} Las ventas anteriores se conservan. Si solo querés ocultarla (por ejemplo, si hoy no hay), desactivala.`}
         textoConfirmar="Borrar"
         procesando={borrando}
         onConfirmar={borrar}

@@ -23,13 +23,13 @@ function TooltipFacturacion({ active, payload }) {
   );
 }
 
-// Facturación diaria (ventas confirmadas) del período
+// Facturación diaria (ventas cobradas) del período
 export function GraficoFacturacion({ dias }) {
   const hayDatos = dias.some((d) => d.total > 0);
   return (
     <div className="tarjeta p-4">
       <h2 className="text-sm font-semibold">Facturación por día</h2>
-      <p className="mb-3 text-xs text-tinta-suave">Solo ventas confirmadas, en pesos.</p>
+      <p className="mb-3 text-xs text-tinta-suave">Solo ventas cobradas, en pesos.</p>
       {hayDatos ? (
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
@@ -56,7 +56,7 @@ export function GraficoFacturacion({ dias }) {
           </ResponsiveContainer>
         </div>
       ) : (
-        <p className="grid h-40 place-items-center text-sm text-tinta-suave">Sin ventas confirmadas en este período.</p>
+        <p className="grid h-40 place-items-center text-sm text-tinta-suave">Sin ventas cobradas en este período.</p>
       )}
     </div>
   );
@@ -68,7 +68,7 @@ export function RankingComidas({ ranking }) {
   return (
     <div className="tarjeta p-4">
       <h2 className="text-sm font-semibold">Las 5 más vendidas</h2>
-      <p className="mb-3 text-xs text-tinta-suave">Unidades en ventas confirmadas.</p>
+      <p className="mb-3 text-xs text-tinta-suave">Unidades en ventas cobradas.</p>
       {ranking.length === 0 ? (
         <p className="grid h-40 place-items-center text-sm text-tinta-suave">Todavía no hay datos.</p>
       ) : (

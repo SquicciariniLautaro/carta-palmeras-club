@@ -19,6 +19,7 @@ export default function Carrito({
   cerrado, // null si está abierto; si no, "Abrimos hoy a las 20:00 hs"
 }) {
   const [cliente, setCliente] = useState("");
+  const [telefono, setTelefono] = useState("");
   const [nota, setNota] = useState("");
   const [entrega, setEntrega] = useState(ENTREGA.retiro);
   const [direccion, setDireccion] = useState(DIRECCION_VACIA);
@@ -45,12 +46,14 @@ export default function Carrito({
     e.preventDefault();
     const ok = await onEnviar({
       cliente: cliente.trim(),
+      telefono: telefono.trim(),
       nota: nota.trim(),
       entrega,
       direccion: Object.fromEntries(Object.entries(direccion).map(([k, v]) => [k, v.trim()])),
     });
     if (ok) {
       setCliente("");
+      setTelefono("");
       setNota("");
       setEntrega(ENTREGA.retiro);
       setDireccion(DIRECCION_VACIA);
@@ -150,6 +153,25 @@ export default function Carrito({
                     maxLength={80}
                     autoComplete="name"
                     placeholder="Insertar nombre"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="telefono" className="etiqueta">
+                    Tu WhatsApp (para confirmarte el pedido)
+                  </label>
+                  <input
+                    id="telefono"
+                    className="campo"
+                    type="tel"
+                    value={telefono}
+                    onChange={(e) => setTelefono(e.target.value)}
+                    maxLength={25}
+                    required
+                    pattern="[0-9 +\(\)\-]{8,25}"
+                    title="Escribí tu número con código de área, por ejemplo 388 4131570"
+                    autoComplete="tel"
+                    inputMode="tel"
+                    placeholder="Ej.: 388 4131570"
                   />
                 </div>
                 <fieldset>

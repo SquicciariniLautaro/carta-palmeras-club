@@ -1,26 +1,77 @@
-import { claveDia, fechaInput, formatearFechaHora, precioFinal } from "../../lib/formato";
+import { claveDia, fechaInput, precioFinal } from "../../lib/formato";
 import { opcionesDe } from "../../lib/opciones";
 
-// Recorrido de un pedido: pendiente → en preparación → enviado → entregado → cerrado.
-// "Cerrado" = entregado y cobrado: solo los cerrados cuentan en la facturación.
-export const ESTADOS = {
-  pendiente: { nombre: "Pendiente", clase: "bg-brasa/15 text-brasa border-brasa/40" },
-  en_preparacion: { nombre: "En preparación", clase: "bg-amber-100 text-amber-900 border-amber-300" },
-  enviado: { nombre: "Enviado", clase: "bg-sky-100 text-sky-900 border-sky-300" },
-  entregado: { nombre: "Entregado", clase: "bg-violet-100 text-violet-900 border-violet-300" },
-  cerrado: { nombre: "Cerrado", clase: "bg-emerald-100 text-emerald-900 border-emerald-300" },
-  cancelado: { nombre: "Cancelado", clase: "bg-borde text-tinta-suave border-borde" },
+// Turnos del negocio. La noche es la carta online; el mediodía es solo de uso interno.
+export const TURNOS = {
+  noche: { nombre: "Venta noche", corto: "Noche", detalle: "Carta online y pedidos por WhatsApp" },
+  mediodia: { nombre: "Venta mediodía", corto: "Mediodía", detalle: "Menú del mediodía · uso interno" },
 };
 
-// Pedidos que todavía falta cerrar (se muestran arriba de todo en Ventas)
+// Recorrido de un pedido: nuevo → en preparación → en camino → entregado → cobrado.
+// "Cobrado" (cerrado) = se registró el pago: solo esas ventas cuentan en la facturación.
+// Los cancelados se eliminan automáticamente (no quedan en el historial).
+export const ESTADOS = {
+  pendiente: { nombre: "Nuevo", clase: "bg-brasa/15 text-brasa border-brasa/40", color: "#c2371c" },
+  en_preparacion: { nombre: "En preparación", clase: "bg-amber-100 text-amber-900 border-amber-300", color: "#d97706" },
+  enviado: { nombre: "En camino", clase: "bg-sky-100 text-sky-900 border-sky-300", color: "#0284c7" },
+  entregado: { nombre: "Entregado", clase: "bg-violet-100 text-violet-900 border-violet-300", color: "#7c3aed" },
+  cerrado: { nombre: "Cobrado", clase: "bg-emerald-100 text-emerald-900 border-emerald-300", color: "#059669" },
+  cancelado: { nombre: "Cancelado", clase: "bg-borde text-tinta-suave border-borde", color: "#6b5b4e" },
+};
+
+// Pedidos que todavía falta cobrar (se muestran en el tablero), en orden
 export const ESTADOS_ABIERTOS = ["pendiente", "en_preparacion", "enviado", "entregado"];
 
 export function estaAbierto(venta) {
   return ESTADOS_ABIERTOS.includes(venta.estado);
 }
 
+// La entrega viaja en la nota: "Envío a domicilio: …" o "Retira en el local"
+export function esEnvio(venta) {
+  return /^env[ií]o a domicilio/i.test(venta?.nota ?? "");
+}
+
+// Nombre del estado según el tipo de pedido (en camino / listo para retirar / servido)
+export function nombreEstado(venta, estado = venta.estado) {
+  if (estado === "enviado") {
+    if (venta.origen === "manual") return "Servido";
+    return esEnvio(venta) ? "En camino" : "Listo para retirar";
+  }
+  return ESTADOS[estado]?.nombre ?? estado;
+}
+
+// Próximo paso del pedido y el texto del botón que lo hace avanzar
+export function siguientePaso(venta) {
+  switch (venta.estado) {
+    case "pendiente":
+      return { estado: "en_preparacion", texto: venta.origen === "web" ? "Confirmar pedido" : "Pasar a cocina" };
+    case "en_preparacion":
+      return {
+        estado: "enviado",
+        texto: venta.origen === "manual" ? "Marcar servido" : esEnvio(venta) ? "Salió el delivery" : "Listo para retirar",
+      };
+    case "enviado":
+      return { estado: "entregado", texto: "Marcar entregado" };
+    case "entregado":
+      return { estado: "cerrado", texto: "Cobrar y cerrar cuenta" };
+    default:
+      return null;
+  }
+}
+
+export const METODOS_PAGO = {
+  efectivo: { nombre: "Efectivo" },
+  transferencia: { nombre: "Transferencia" },
+  cuenta_corriente: { nombre: "Cuenta corriente" },
+};
+
+// "Efectivo $ 5.000 + Transferencia $ 17.000"
+export function textoPagos(pagos, formatear) {
+  return (pagos ?? []).map((p) => `${METODOS_PAGO[p.metodo]?.nombre ?? p.metodo} ${formatear(p.monto)}`).join(" + ");
+}
+
 // Una entrada por comida, o una por variante si la comida las tiene (Simple, Doble…).
-// La usan la venta manual y la edición de pedidos.
+// La usan la venta en caja y la edición de pedidos.
 export function entradasDeComidas(comidas) {
   const lista = [];
   for (const c of [...comidas].sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))) {
@@ -60,6 +111,15 @@ export const RANGOS = [
   { id: "personalizado", nombre: "Personalizado" },
 ];
 
+// Períodos para las secciones de dinero (gastos, finanzas)
+export const RANGOS_MES = [
+  { id: "mes", nombre: "Este mes" },
+  { id: "mes_anterior", nombre: "Mes anterior" },
+  { id: "30", nombre: "Últimos 30 días" },
+  { id: "anio", nombre: "Este año" },
+  { id: "personalizado", nombre: "Personalizado" },
+];
+
 function inicioDelDia(fecha) {
   const d = new Date(fecha);
   d.setHours(0, 0, 0, 0);
@@ -67,7 +127,7 @@ function inicioDelDia(fecha) {
 }
 
 // "2026-10-02" → Date local a las 00:00
-function desdeInput(texto) {
+export function desdeInput(texto) {
   const [a, m, d] = texto.split("-").map(Number);
   return new Date(a, m - 1, d);
 }
@@ -84,6 +144,11 @@ export function calcularRango(rango, desdeTexto, hastaTexto) {
     desde.setDate(desde.getDate() - (Number(rango) - 1));
     return { desde, hasta: manana };
   }
+  if (rango === "mes") return { desde: new Date(hoy.getFullYear(), hoy.getMonth(), 1), hasta: manana };
+  if (rango === "mes_anterior") {
+    return { desde: new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1), hasta: new Date(hoy.getFullYear(), hoy.getMonth(), 1) };
+  }
+  if (rango === "anio") return { desde: new Date(hoy.getFullYear(), 0, 1), hasta: manana };
   if (!desdeTexto || !hastaTexto) return null;
   const desde = desdeInput(desdeTexto);
   const hasta = desdeInput(hastaTexto);
@@ -96,11 +161,22 @@ export function hoyInput() {
   return fechaInput(new Date());
 }
 
+// "16/10/2026 al 31/10/2026" para títulos de reportes y nombres de archivo
+export function textoPeriodo(periodo) {
+  const fin = new Date(periodo.hasta.getTime() - 864e5);
+  const f = (d) => d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return `${f(periodo.desde)} al ${f(fin)}`;
+}
+
+export function sufijoArchivo(periodo) {
+  return `${fechaInput(periodo.desde)}_a_${fechaInput(periodo.hasta.getTime() - 864e5)}`;
+}
+
 export function unidadesDeVenta(venta) {
   return (venta.venta_items ?? []).reduce((acc, i) => acc + i.cantidad, 0);
 }
 
-// Facturación (solo pedidos cerrados) por día, incluyendo días sin ventas
+// Facturación (solo ventas cobradas) por día, incluyendo días sin ventas
 export function facturacionPorDia(ventas, desde, hasta) {
   const totales = new Map();
   for (const v of ventas) {
@@ -119,7 +195,7 @@ export function facturacionPorDia(ventas, desde, hasta) {
   return dias;
 }
 
-// Las 5 comidas más vendidas (por unidades) entre los pedidos cerrados
+// Las 5 comidas más vendidas (por unidades) entre las ventas cobradas
 export function masVendidas(ventas, limite = 5) {
   const porNombre = new Map();
   for (const v of ventas) {
@@ -133,37 +209,4 @@ export function masVendidas(ventas, limite = 5) {
     }
   }
   return [...porNombre.values()].sort((a, b) => b.unidades - a.unidades || b.total - a.total).slice(0, limite);
-}
-
-// CSV con ";" y coma decimal: se abre bien en Excel configurado en español
-export function ventasACsv(ventas) {
-  const celda = (valor) => {
-    const texto = String(valor ?? "");
-    return /[";\n\r]/.test(texto) ? `"${texto.replace(/"/g, '""')}"` : texto;
-  };
-  const numero = (n) => Number(n).toFixed(2).replace(".", ",");
-  const encabezado = ["Número", "Fecha", "Cliente", "Ítems", "Unidades", "Total", "Estado", "Origen", "Nota"];
-  const filas = ventas.map((v) => [
-    v.numero,
-    formatearFechaHora(v.created_at),
-    v.cliente_nombre ?? "",
-    (v.venta_items ?? []).map((i) => `${i.cantidad}x ${i.nombre}${i.detalle ? ` (${i.detalle})` : ""}`).join(", "),
-    unidadesDeVenta(v),
-    numero(v.total),
-    ESTADOS[v.estado]?.nombre ?? v.estado,
-    v.origen === "manual" ? "Manual" : "Web",
-    v.nota ?? "",
-  ]);
-  return "﻿" + [encabezado, ...filas].map((f) => f.map(celda).join(";")).join("\r\n");
-}
-
-export function descargarArchivo(contenido, nombre, tipo = "text/csv;charset=utf-8") {
-  const url = URL.createObjectURL(new Blob([contenido], { type: tipo }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = nombre;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
