@@ -29,6 +29,39 @@ function Opcion({ marcado, onCambio, titulo, detalle }) {
   );
 }
 
+function Paso({ titulo, children }) {
+  return (
+    <details className="rounded-xl bg-fondo p-3">
+      <summary className="cursor-pointer font-semibold text-tinta">{titulo}</summary>
+      <ol className="mt-2 list-disc space-y-1 pl-4">{children}</ol>
+    </details>
+  );
+}
+
+// Ubicación del acceso directo de Chrome que imprime sin preguntar
+function AccesoDirecto() {
+  const panel = new URL("admin", window.location.origin + import.meta.env.BASE_URL).href;
+  const comando = `"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --kiosk-printing ${panel}`;
+
+  async function copiar() {
+    try {
+      await navigator.clipboard.writeText(comando);
+      toast.success("Copiado");
+    } catch {
+      toast.error("No se pudo copiar: seleccioná el texto y copialo a mano");
+    }
+  }
+
+  return (
+    <li className="flex list-none items-start gap-2">
+      <code className="min-w-0 flex-1 break-all rounded bg-borde px-1.5 py-1 text-tinta select-all">{comando}</code>
+      <button type="button" className="boton-secundario px-2.5 py-1.5 text-xs" onClick={copiar}>
+        Copiar
+      </button>
+    </li>
+  );
+}
+
 function Contenido({ onCerrar }) {
   const [config, setConfig] = useState(leerConfigImpresora);
   const set = (cambios) => setConfig((c) => ({ ...c, ...cambios }));
@@ -79,15 +112,44 @@ function Contenido({ onCerrar }) {
         />
       </div>
 
-      <div className="rounded-xl bg-fondo p-3 text-xs text-tinta-suave">
-        <p className="font-semibold text-tinta">Para imprimir sin el cuadro de diálogo</p>
-        <ol className="mt-1 list-decimal space-y-0.5 pl-4">
-          <li>Instalá la ticketera en Windows y dejala como impresora predeterminada.</li>
+      <div className="space-y-2 text-xs text-tinta-suave">
+        <p>
+          Si en la vista previa el ticket aparece chiquito en una hoja A4, la impresora elegida no es la ticketera (por ejemplo "Microsoft
+          Print to PDF"): Windows todavía no la tiene instalada.
+        </p>
+        <Paso titulo="1. Instalar la ticketera en Windows">
           <li>
-            Abrí el panel con un acceso directo de Chrome que tenga al final <code className="rounded bg-borde px-1">--kiosk-printing</code>.
+            Bajá el driver de la marca (3nStar: <code className="rounded bg-borde px-1">3nstar.com</code> → Soporte → Drivers, buscá el modelo
+            que figura en la etiqueta de abajo, por ejemplo RPT006 o RPT008). Sin el driver, Windows no la encuentra.
           </li>
-          <li>En la primera impresión elegí márgenes "Ninguno" y desactivá "Encabezados y pies de página".</li>
-        </ol>
+          <li>
+            <strong>Por USB:</strong> con la ticketera prendida y el cable conectado, instalá el driver y elegí el puerto USB001 (o el que
+            aparezca).
+          </li>
+          <li>
+            <strong>Por cable de red:</strong> apagala, mantené apretado FEED y prendela: imprime una hoja con su dirección IP. En{" "}
+            <em>Agregar impresora</em> elegí "Agregar una impresora con una dirección IP o un nombre de host", poné esa IP y el driver de la
+            marca.
+          </li>
+          <li>Si no hay driver para el modelo, el genérico "POS-80" (ESC/POS) suele funcionar.</li>
+          <li>En las Preferencias de impresión de la ticketera elegí papel de {config.ancho} mm.</li>
+        </Paso>
+        <Paso titulo="2. Dejarla como predeterminada">
+          <li>
+            En Configuración → Impresoras y escáneres, <strong>destildá</strong> "Permitir que Windows administre mi impresora
+            predeterminada".
+          </li>
+          <li>Entrá a la ticketera y tocá "Establecer como predeterminada".</li>
+          <li>
+            Imprimí una prueba desde acá eligiendo la ticketera en <em>Destino</em>, con márgenes "Ninguno" y sin "Encabezados y pies de
+            página". Chrome lo recuerda para las próximas.
+          </li>
+        </Paso>
+        <Paso titulo="3. Imprimir directo, sin el cuadro de diálogo">
+          <li>Click derecho en el escritorio → Nuevo → Acceso directo, y pegá esto como ubicación:</li>
+          <AccesoDirecto />
+          <li>Cerrá Chrome del todo (también el ícono junto al reloj) y abrí el panel siempre desde ese acceso directo.</li>
+        </Paso>
       </div>
 
       <div className="flex flex-wrap justify-between gap-2">
