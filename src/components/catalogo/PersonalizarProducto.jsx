@@ -3,7 +3,6 @@ import Modal from "../ui/Modal";
 import { formatearPrecio } from "../../lib/formato";
 import { LARGO_ACLARACION, PREGUNTA_POR_DEFECTO, configInicial, opcionesDe, precioLinea } from "../../lib/opciones";
 import ControlCantidad from "./ControlCantidad";
-import { ImagenComida } from "./TarjetaProducto";
 
 function Seccion({ titulo, ayuda, children }) {
   return (
@@ -60,7 +59,6 @@ function Armado({ comida, maximo, onAgregar }) {
         onAgregar(config, cantidad);
       }}
     >
-      <ImagenComida comida={comida} className="aspect-[16/9] w-full rounded-xl" proporcion="16:9" ancho={900} />
       {comida.descripcion && <p className="text-sm text-tinta-suave">{comida.descripcion}</p>}
 
       {variantes.length > 0 && (

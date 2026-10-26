@@ -3,7 +3,6 @@ import { IconoWhatsApp } from "../ui/Iconos";
 import { tieneOpciones } from "../../lib/opciones";
 import ControlCantidad from "./ControlCantidad";
 import Precio from "./Precio";
-import { ImagenComida } from "./TarjetaProducto";
 
 // Modal con la descripción completa de una comida
 export default function DetalleProducto({ comida, categoria, cantidad, onCerrar, onAgregar, onSumar, onRestar, onPersonalizar, onConsultar }) {
@@ -11,7 +10,6 @@ export default function DetalleProducto({ comida, categoria, cantidad, onCerrar,
     <Modal abierto={Boolean(comida)} onCerrar={onCerrar} titulo={comida?.nombre ?? ""}>
       {comida && (
         <div className="space-y-4">
-          <ImagenComida comida={comida} className="aspect-[4/3] w-full rounded-xl" proporcion="4:3" ancho={900} />
           {categoria && <p className="text-xs font-medium uppercase tracking-wider text-palmera">{categoria}</p>}
           <p className="whitespace-pre-line text-sm text-tinta-suave">
             {comida.descripcion || "Sin descripción."}
