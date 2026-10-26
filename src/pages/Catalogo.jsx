@@ -10,7 +10,9 @@ import { revalidarCarrito, useCarrito } from "../hooks/useCarrito";
 import CarritoProvider from "../components/catalogo/CarritoProvider";
 import Navbar from "../components/catalogo/Navbar";
 import Filtros from "../components/catalogo/Filtros";
-import TarjetaProducto, { TarjetaEsqueleto } from "../components/catalogo/TarjetaProducto";
+import FilaProducto from "../components/catalogo/FilaProducto";
+import TarjetaCategoria, { TarjetaCategoriaEsqueleto } from "../components/catalogo/TarjetaCategoria";
+import SelloCarta from "../components/catalogo/SelloCarta";
 import DetalleProducto from "../components/catalogo/DetalleProducto";
 import PersonalizarProducto from "../components/catalogo/PersonalizarProducto";
 import Carrito from "../components/catalogo/Carrito";
@@ -18,6 +20,7 @@ import BotonFlotante from "../components/catalogo/BotonFlotante";
 import Footer from "../components/catalogo/Footer";
 import Preloader from "../components/catalogo/Preloader";
 import AvisoCerrado from "../components/catalogo/AvisoCerrado";
+import { IconoFlechaAbajo } from "../components/ui/Iconos";
 
 // Trae categorías, comidas activas y el horario de atención de la carta (turno noche)
 async function obtenerCatalogo() {
@@ -77,7 +80,7 @@ function CatalogoContenido() {
     return () => clearInterval(id);
   }, []);
   const [busqueda, setBusqueda] = useState("");
-  const [filtro, setFiltro] = useState("todos");
+  const [activa, setActiva] = useState(null);
   const [detalleId, setDetalleId] = useState(null);
   const [personalizandoId, setPersonalizandoId] = useState(null);
   const [carritoAbierto, setCarritoAbierto] = useState(false);
@@ -132,31 +135,67 @@ function CatalogoContenido() {
   const comidasPorId = useMemo(() => new Map(comidas.map((c) => [c.id, c])), [comidas]);
   const categoriasPorId = useMemo(() => new Map(categorias.map((c) => [c.id, c])), [categorias]);
 
-  // Categorías que tienen al menos una comida visible
-  const categoriasConComidas = useMemo(
-    () => categorias.filter((cat) => comidas.some((c) => c.categoria_id === cat.id)),
-    [categorias, comidas]
-  );
-  const hayPromos = comidas.some(tienePromo);
-
-  // Filtro + búsqueda + orden (destacados primero, luego categoría y nombre)
-  const visibles = useMemo(() => {
+  // Secciones de la carta, en el orden de las categorías: arriba las promos y al
+  // final lo que no tiene categoría. Dentro de cada una, destacados primero.
+  // El buscador mira el nombre y la descripción.
+  const secciones = useMemo(() => {
     const texto = normalizarTexto(busqueda);
-    return comidas
-      .filter((c) => {
-        if (filtro === "promos" && !tienePromo(c)) return false;
-        if (filtro !== "todos" && filtro !== "promos" && c.categoria_id !== filtro) return false;
-        if (texto && !normalizarTexto(c.nombre).includes(texto)) return false;
-        return true;
-      })
-      .sort((a, b) => {
-        if (a.destacado !== b.destacado) return a.destacado ? -1 : 1;
-        const oa = categoriasPorId.get(a.categoria_id)?.orden ?? 0;
-        const ob = categoriasPorId.get(b.categoria_id)?.orden ?? 0;
-        if (oa !== ob) return oa - ob;
-        return a.nombre.localeCompare(b.nombre, "es");
+    const coincide = (c) =>
+      !texto || normalizarTexto(c.nombre).includes(texto) || normalizarTexto(c.descripcion ?? "").includes(texto);
+    const ordenar = (a, b) =>
+      a.destacado !== b.destacado ? (a.destacado ? -1 : 1) : a.nombre.localeCompare(b.nombre, "es");
+    const lista = categorias.map((cat) => ({
+      id: cat.id,
+      nombre: cat.nombre,
+      comidas: comidas.filter((c) => c.categoria_id === cat.id && coincide(c)).sort(ordenar),
+    }));
+    lista.push({
+      id: "otros",
+      nombre: "Otros",
+      comidas: comidas.filter((c) => !categoriasPorId.has(c.categoria_id) && coincide(c)).sort(ordenar),
+    });
+    if (!texto) {
+      lista.unshift({
+        id: "promos",
+        nombre: "Promos",
+        bajada: "Aprovechá",
+        resaltada: true,
+        comidas: comidas.filter(tienePromo).sort(ordenar),
       });
-  }, [comidas, filtro, busqueda, categoriasPorId]);
+    }
+    return lista.filter((s) => s.comidas.length > 0);
+  }, [comidas, categorias, categoriasPorId, busqueda]);
+
+  // Marca en la barra la sección que está a la vista mientras el cliente baja
+  useEffect(() => {
+    if (secciones.length === 0) return;
+    let pendiente = 0;
+    function revisar() {
+      pendiente = 0;
+      let actual = secciones[0].id;
+      for (const s of secciones) {
+        const el = document.getElementById(`seccion-${s.id}`);
+        if (el && el.getBoundingClientRect().top <= 170) actual = s.id;
+      }
+      setActiva(actual);
+    }
+    const alDesplazar = () => {
+      if (!pendiente) pendiente = requestAnimationFrame(revisar);
+    };
+    pendiente = requestAnimationFrame(revisar);
+    window.addEventListener("scroll", alDesplazar, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", alDesplazar);
+      cancelAnimationFrame(pendiente);
+    };
+  }, [secciones]);
+
+  function irASeccion(id) {
+    setActiva(id);
+    document.getElementById(`seccion-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  const nombreActiva = secciones.find((s) => s.id === activa)?.nombre;
 
   // Líneas del carrito con los datos actuales de cada comida
   const lineas = useMemo(
@@ -286,82 +325,127 @@ function CatalogoContenido() {
     <div className="flex min-h-dvh flex-col">
       <Navbar cantidad={unidades} onAbrirCarrito={() => setCarritoAbierto(true)} />
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4">
-        <section className="pb-2 pt-4 text-center">
-          <h1 className="font-script text-5xl leading-tight text-palmera sm:text-6xl">{NEGOCIO.nombre}</h1>
-          <h2 className="text-sm font-semibold uppercase tracking-[0.3em] text-tinta">Nuestra carta</h2>
-          <p className="mt-1 text-sm text-tinta-suave">Armá tu pedido y mandalo por WhatsApp.</p>
+      <main className="flex-1">
+        <section className="mx-auto max-w-6xl px-4 pb-8 pt-4 text-center sm:pb-14 sm:pt-10">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-tinta-suave">Nuestra carta</p>
+          <h1 className="font-script text-6xl leading-tight text-palmera sm:text-8xl">{NEGOCIO.nombre}</h1>
+          <div className="mx-auto mt-1 flex max-w-md items-center gap-3 text-tinta">
+            <span className="h-px flex-1 bg-tinta/30" />
+            <span className="text-[11px] font-semibold uppercase tracking-[0.3em]">Armá tu pedido</span>
+            <span className="h-px flex-1 bg-tinta/30" />
+          </div>
+          <p className="mt-3 text-sm text-tinta-suave">Elegí lo que quieras y mandalo directo por WhatsApp.</p>
+          {estado !== "error" && (
+            <a
+              href="#carta"
+              onClick={(e) => {
+                e.preventDefault();
+                document.getElementById("carta")?.scrollIntoView({ behavior: "smooth" });
+              }}
+              className="mt-5 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.25em] text-palmera hover:text-palmera-oscuro"
+            >
+              Ver la carta <IconoFlechaAbajo className="size-4 animate-bounce" />
+            </a>
+          )}
+          {estado !== "error" && !local.abierto && (
+            <div className="mt-6">
+              <AvisoCerrado estado={local} horarios={horarios} />
+            </div>
+          )}
         </section>
 
-        {estado !== "error" && !local.abierto && <AvisoCerrado estado={local} horarios={horarios} />}
-
         {estado === "error" ? (
-          <div className="tarjeta mx-auto my-10 max-w-md p-6 text-center">
-            <p className="text-lg font-semibold">No pudimos cargar el menú</p>
-            <p className="mt-1 text-sm text-tinta-suave">
-              Revisá tu conexión e intentá de nuevo. Si sigue fallando, escribinos por WhatsApp.
-            </p>
-            <div className="mt-4 flex flex-wrap justify-center gap-2">
-              <button type="button" className="boton-primario" onClick={reintentar}>
-                Reintentar
-              </button>
-              <button type="button" className="boton-whatsapp" onClick={() => consultar(null)}>
-                WhatsApp
-              </button>
+          <div className="px-4">
+            <div className="tarjeta mx-auto mb-10 max-w-md p-6 text-center">
+              <p className="text-lg font-semibold">No pudimos cargar el menú</p>
+              <p className="mt-1 text-sm text-tinta-suave">
+                Revisá tu conexión e intentá de nuevo. Si sigue fallando, escribinos por WhatsApp.
+              </p>
+              <div className="mt-4 flex flex-wrap justify-center gap-2">
+                <button type="button" className="boton-primario" onClick={reintentar}>
+                  Reintentar
+                </button>
+                <button type="button" className="boton-whatsapp" onClick={() => consultar(null)}>
+                  WhatsApp
+                </button>
+              </div>
             </div>
           </div>
         ) : (
-          <>
+          <div id="carta" className="scroll-mt-[72px]">
             <Filtros
-              categorias={categoriasConComidas}
-              filtro={filtro}
-              onFiltro={setFiltro}
+              secciones={secciones}
+              activa={activa}
+              onIr={irASeccion}
               busqueda={busqueda}
               onBusqueda={setBusqueda}
-              hayPromos={hayPromos}
             />
 
-            {estado === "cargando" ? (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                {Array.from({ length: 8 }, (_, i) => (
-                  <TarjetaEsqueleto key={i} />
-                ))}
+            <div className="mantel">
+              <div className="mx-auto grid max-w-6xl gap-8 px-3 py-8 sm:px-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-12 lg:py-16">
+                <aside className="hidden lg:block">
+                  <div className="sticky top-44 pt-6">
+                    <SelloCarta texto={nombreActiva ?? "¿Con hambre?"} className="w-72 xl:w-80" />
+                    <p className="mx-auto mt-8 max-w-xs text-center text-sm font-medium text-fondo/90">
+                      Tocá el <span className="font-bold">+</span> para sumar al pedido. Cuando termines, lo mandás
+                      por WhatsApp.
+                    </p>
+                  </div>
+                </aside>
+
+                <div className="space-y-6">
+                  <SelloCarta texto="¿Con hambre?" className="mb-2 w-40 sm:w-52 lg:hidden" />
+
+                  {estado === "cargando" ? (
+                    <>
+                      <TarjetaCategoriaEsqueleto />
+                      <TarjetaCategoriaEsqueleto />
+                    </>
+                  ) : secciones.length === 0 ? (
+                    <div className="rounded-[28px] bg-papel p-8 text-center">
+                      <p className="font-semibold">
+                        {comidas.length === 0
+                          ? "Todavía no hay comidas cargadas."
+                          : `No encontramos nada con “${busqueda.trim()}”.`}
+                      </p>
+                      {busqueda && (
+                        <button
+                          type="button"
+                          className="mt-3 text-sm font-medium text-palmera underline"
+                          onClick={() => setBusqueda("")}
+                        >
+                          Ver toda la carta
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    secciones.map((s) => (
+                      <TarjetaCategoria
+                        key={s.id}
+                        id={s.id}
+                        titulo={s.nombre}
+                        bajada={s.bajada}
+                        resaltada={s.resaltada}
+                      >
+                        {s.comidas.map((comida) => (
+                          <FilaProducto
+                            key={comida.id}
+                            comida={comida}
+                            cantidad={carrito.cantidadDe(comida.id)}
+                            onAgregar={() => sumar(comida)}
+                            onSumar={() => sumar(comida)}
+                            onRestar={() => restarSimple(comida)}
+                            onPersonalizar={() => abrirPersonalizar(comida)}
+                            onVerDetalle={() => setDetalleId(comida.id)}
+                          />
+                        ))}
+                      </TarjetaCategoria>
+                    ))
+                  )}
+                </div>
               </div>
-            ) : visibles.length === 0 ? (
-              <div className="py-16 text-center text-tinta-suave">
-                <p className="font-medium text-tinta">
-                  {comidas.length === 0 ? "Todavía no hay comidas cargadas." : "No encontramos nada con ese filtro."}
-                </p>
-                {(busqueda || filtro !== "todos") && (
-                  <button
-                    type="button"
-                    className="mt-3 text-sm text-palmera underline"
-                    onClick={() => {
-                      setBusqueda("");
-                      setFiltro("todos");
-                    }}
-                  >
-                    Ver todo el menú
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                {visibles.map((comida) => (
-                  <TarjetaProducto
-                    key={comida.id}
-                    comida={comida}
-                    cantidad={carrito.cantidadDe(comida.id)}
-                    onAgregar={() => sumar(comida)}
-                    onSumar={() => sumar(comida)}
-                    onRestar={() => restarSimple(comida)}
-                    onPersonalizar={() => abrirPersonalizar(comida)}
-                    onVerDetalle={() => setDetalleId(comida.id)}
-                  />
-                ))}
-              </div>
-            )}
-          </>
+            </div>
+          </div>
         )}
       </main>
 
