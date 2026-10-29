@@ -10,15 +10,17 @@ import FormComida from "./FormComida";
 import { ESTADOS_STOCK, estadoStock, idsDeKiosco } from "./ventasUtils";
 import { useRol } from "../../hooks/useRol";
 
-function Interruptor({ activo, onCambiar, etiqueta }) {
+function Interruptor({ activo, onCambiar, etiqueta, bloqueado = false, motivo }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={activo}
       aria-label={etiqueta}
-      onClick={onCambiar}
-      className={`relative h-6 w-11 shrink-0 rounded-full transition ${activo ? "bg-palmera" : "bg-borde"}`}
+      aria-disabled={bloqueado || undefined}
+      title={bloqueado ? motivo : undefined}
+      onClick={bloqueado ? () => toast.error(motivo) : onCambiar}
+      className={`relative h-6 w-11 shrink-0 rounded-full transition ${activo ? "bg-palmera" : "bg-borde"} ${bloqueado ? "cursor-not-allowed opacity-50" : ""}`}
     >
       <span
         className={`absolute top-0.5 size-5 rounded-full bg-tinta transition-all ${activo ? "left-5.5" : "left-0.5"}`}
@@ -32,6 +34,7 @@ export default function ListaComidas({ turno = "noche", comidas, categorias, car
   const { esDueno } = useRol();
   const [busqueda, setBusqueda] = useState("");
   const [categoriaFiltro, setCategoriaFiltro] = useState("");
+  const [soloSinPrecio, setSoloSinPrecio] = useState(false);
   const [editando, setEditando] = useState(null); // null | "nueva" | comida
   const [aBorrar, setABorrar] = useState(null);
   const [borrando, setBorrando] = useState(false);
@@ -39,14 +42,19 @@ export default function ListaComidas({ turno = "noche", comidas, categorias, car
   const nombreCategoria = useMemo(() => new Map(categorias.map((c) => [c.id, c.nombre])), [categorias]);
   const kiosco = useMemo(() => idsDeKiosco(categorias, comidas), [categorias, comidas]);
 
+  // Platos cargados sin precio (por ejemplo la lista del mediodía): el dueño se lo pone
+  const sinPrecio = useMemo(() => comidas.filter((c) => c.precio == null).length, [comidas]);
+  const verSinPrecio = soloSinPrecio && sinPrecio > 0;
+
   const filtradas = useMemo(() => {
     const texto = normalizarTexto(busqueda);
     return comidas.filter(
       (c) =>
         (!categoriaFiltro || c.categoria_id === categoriaFiltro) &&
-        (!texto || normalizarTexto(c.nombre).includes(texto))
+        (!texto || normalizarTexto(c.nombre).includes(texto)) &&
+        (!verSinPrecio || c.precio == null)
     );
-  }, [comidas, busqueda, categoriaFiltro]);
+  }, [comidas, busqueda, categoriaFiltro, verSinPrecio]);
 
   async function actualizar(comida, cambios, mensaje) {
     const { error } = await supabase.from("comidas").update(cambios).eq("id", comida.id);
@@ -102,6 +110,24 @@ export default function ListaComidas({ turno = "noche", comidas, categorias, car
           <p className="max-w-xs text-xs text-tinta-suave">Los productos y los precios los cambia el dueño. Vos marcás si hay o no hay.</p>
         )}
       </div>
+
+      {sinPrecio > 0 && (
+        <div className="tarjeta flex flex-wrap items-center justify-between gap-3 border-l-4 border-l-brasa p-3 text-sm">
+          <p>
+            <span className="font-semibold">
+              {sinPrecio === 1 ? "1 plato todavía no tiene precio." : `${sinPrecio} platos todavía no tienen precio.`}
+            </span>{" "}
+            <span className="text-tinta-suave">
+              {esDueno
+                ? "Tocá Editar, poné el precio y guardá: ahí queda disponible para vender."
+                : "Hasta que el dueño les ponga precio no se pueden vender."}
+            </span>
+          </p>
+          <button type="button" className="boton-secundario px-3 py-2" onClick={() => setSoloSinPrecio(!verSinPrecio)}>
+            {verSinPrecio ? "Ver todos" : "Ver solo los sin precio"}
+          </button>
+        </div>
+      )}
 
       <div className="flex flex-col gap-2 sm:flex-row">
         <label className="relative flex-1">
@@ -176,9 +202,13 @@ export default function ListaComidas({ turno = "noche", comidas, categorias, car
               </div>
 
               <div className="col-span-2 text-sm lg:col-span-1">
+                {c.precio == null ? (
+                  <span className="rounded-full bg-brasa/15 px-2 py-0.5 text-xs font-semibold text-brasa">Sin precio</span>
+                ) : (
                 <span className={c.precio_promo ? "text-xs text-tinta-suave line-through" : "font-semibold"}>
                   {formatearPrecio(c.precio)}
                 </span>
+                )}
                 {c.precio_promo && (
                   <span className="ml-2 font-semibold text-brasa">{formatearPrecio(c.precio_promo)}</span>
                 )}
@@ -201,6 +231,8 @@ export default function ListaComidas({ turno = "noche", comidas, categorias, car
                 <Interruptor
                   activo={c.activo}
                   etiqueta={`Activo: ${c.nombre}`}
+                  bloqueado={c.precio == null}
+                  motivo={esDueno ? "Primero ponele precio: tocá Editar." : "Todavía no tiene precio: se lo pone el dueño."}
                   onCambiar={() =>
                     actualizar(
                       c,

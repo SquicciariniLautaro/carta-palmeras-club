@@ -81,6 +81,13 @@ alter table public.comidas add constraint comidas_turno_check check (turno in ('
 -- Las comidas de cocina no llevan stock: si no hay, se desactivan desde el panel.
 alter table public.comidas add column if not exists stock int;
 
+-- Platos sin precio: se pueden cargar sin precio (por ejemplo una lista nueva
+-- del mediodía) para que el dueño lo ponga después. Mientras no tengan precio
+-- no pueden estar disponibles, así nadie los vende a $ 0.
+alter table public.comidas alter column precio drop not null;
+alter table public.comidas drop constraint if exists comidas_precio_activo_check;
+alter table public.comidas add constraint comidas_precio_activo_check check (precio is not null or not activo);
+
 create index if not exists comidas_categoria_idx on public.comidas (categoria_id);
 
 -- Clientes con cuenta corriente (fiado)
@@ -1430,7 +1437,7 @@ returns text
 language sql
 immutable
 as $$
-  select '$ ' || trim(to_char(p, '999999999990.00'));
+  select coalesce('$ ' || trim(to_char(p, '999999999990.00')), 'sin precio');
 $$;
 
 -- Registra el cobro de una venta y la deja cerrada.

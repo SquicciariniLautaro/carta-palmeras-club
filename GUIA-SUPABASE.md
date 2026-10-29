@@ -211,6 +211,12 @@ Corré `supabase/actualizacion-2026-10-29-permisos-stock-cancha.sql` (SQL Editor
 
 Al final muestra 5 tablas con su cantidad de filas (todas en 0 la primera vez). **Después de correrlo, el dueño tiene que fijar el precio de la cancha** (pestaña Cancha → "Cambiar", arriba): mientras no lo haga, los empleados pueden poner cualquier precio.
 
+## Actualización del 29/10/2026 (4): platos del mediodía
+
+Corré `supabase/actualizacion-2026-10-29-platos-mediodia.sql` (SQL Editor → New query → pegar todo → Run), **después** de las tres anteriores del 29/10. Carga la lista de platos del mediodía que mandó el dueño: 44 platos en 5 categorías (Pollo, Carnes, Guisos y estofados, Pastas, Al horno y rellenos). No toca los platos ni las categorías que ya estaban.
+
+Los platos entran **sin precio y no disponibles**. Al final muestra las 5 categorías con cuántos platos tiene cada una (10, 12, 5, 9 y 8) y cuántos siguen sin precio. **Después, el dueño les pone el precio** en Venta mediodía → Platos → Editar: al guardar, el plato queda disponible para vender y para el Menú del día. Mientras no tenga precio no se puede vender ni marcar como disponible.
+
 ## Si algo no anda
 
 | Qué ves | Qué pasa | Cómo se arregla |
