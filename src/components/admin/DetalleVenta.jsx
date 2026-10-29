@@ -6,8 +6,11 @@ import { SelectorEstado } from "./EstadoPedido";
 import { METODOS_PAGO, TURNOS, estaAbierto } from "./ventasUtils";
 
 // La cuenta completa: productos, totales, cobros, comanda y cierre
+import { nombreUsuario, useRol } from "../../hooks/useRol";
+
 export default function DetalleVenta({ venta, onCerrarModal, onEstado, onCobrar, onAnularCobro, onEditar, onBorrar, onImprimir, onAvisar, procesando }) {
   const pagos = venta?.pagos ?? [];
+  const { esDueno } = useRol();
   const cobrada = venta?.estado === "cerrado";
   return (
     <Modal abierto={Boolean(venta)} onCerrar={onCerrarModal} titulo={venta ? `Cuenta #${venta.numero}` : ""} ancho="max-w-2xl">
@@ -90,6 +93,7 @@ export default function DetalleVenta({ venta, onCerrarModal, onEstado, onCobrar,
                       <span>
                         {METODOS_PAGO[p.metodo]?.nombre}
                         {p.clientes?.nombre && ` · ${p.clientes.nombre}`}
+                        {p.usuario && <span className="text-xs text-emerald-800"> · cobró {nombreUsuario(p.usuario)}</span>}
                       </span>
                       <strong>{formatearPesos(p.monto)}</strong>
                     </li>
@@ -122,7 +126,7 @@ export default function DetalleVenta({ venta, onCerrarModal, onEstado, onCobrar,
                   <IconoWhatsApp className="size-4" /> Avisar
                 </button>
               )}
-              {cobrada && pagos.length > 0 && (
+              {cobrada && pagos.length > 0 && esDueno && (
                 <button type="button" className="boton-secundario" onClick={() => onAnularCobro(venta)} disabled={procesando}>
                   <IconoAnular className="size-4" /> Anular cobro
                 </button>
@@ -132,9 +136,11 @@ export default function DetalleVenta({ venta, onCerrarModal, onEstado, onCobrar,
                   <IconoEditar className="size-4" /> Editar
                 </button>
               )}
-              <button type="button" className="boton-secundario hover:text-rojo" onClick={() => onBorrar(venta)} disabled={procesando}>
-                <IconoBasura className="size-4" /> {cobrada ? "Borrar" : "Cancelar pedido"}
-              </button>
+              {(!cobrada || esDueno) && (
+                <button type="button" className="boton-secundario hover:text-rojo" onClick={() => onBorrar(venta)} disabled={procesando}>
+                  <IconoBasura className="size-4" /> {cobrada ? "Borrar" : "Cancelar pedido"}
+                </button>
+              )}
             </div>
           </div>
         </div>

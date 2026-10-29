@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { guardarConfigImpresora, imprimirComanda, leerConfigImpresora } from "../../lib/impresion";
+import { EVENTO_MODO, guardarConfigImpresora, imprimirComanda, leerConfigImpresora, leerModoImpresion } from "../../lib/impresion";
 import { IconoImpresora } from "../ui/Iconos";
 import Modal from "../ui/Modal";
 
@@ -38,10 +38,13 @@ function Paso({ titulo, children }) {
   );
 }
 
-// Ubicación del acceso directo de Chrome que imprime sin preguntar
+// Ubicación del acceso directo de Chrome que imprime sin preguntar.
+// --user-data-dir abre un Chrome aparte: el permiso funciona aunque el Chrome
+// de siempre (YouTube, WhatsApp…) ya esté abierto. --app lo abre en su propia
+// ventana, así el panel no queda como una pestaña escondida detrás de otra.
 function AccesoDirecto() {
   const panel = new URL("admin", window.location.origin + import.meta.env.BASE_URL).href;
-  const comando = `"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --kiosk-printing ${panel}`;
+  const comando = `"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --kiosk-printing --user-data-dir="C:\\PanelPalmeras" --app=${panel}`;
 
   async function copiar() {
     try {
@@ -62,6 +65,37 @@ function AccesoDirecto() {
   );
 }
 
+// Lo que pasó en la última impresión de esta computadora
+function EstadoImpresion() {
+  const [modo, setModo] = useState(leerModoImpresion);
+  useEffect(() => {
+    const alCambiar = (e) => setModo(e.detail);
+    window.addEventListener(EVENTO_MODO, alCambiar);
+    return () => window.removeEventListener(EVENTO_MODO, alCambiar);
+  }, []);
+
+  if (modo === "directa") {
+    return (
+      <p className="rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900">
+        <strong>Imprime directo.</strong> La última impresión salió sola, sin el cuadro de Chrome.
+      </p>
+    );
+  }
+  if (modo === "dialogo") {
+    return (
+      <p className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+        <strong>Todavía pide confirmación.</strong> Chrome mostró el cuadro de impresión: así la comanda no sale sola cuando llega un
+        pedido. Seguí el paso 3 de abajo (el acceso directo) y volvé a imprimir la prueba.
+      </p>
+    );
+  }
+  return (
+    <p className="rounded-xl bg-fondo p-3 text-sm text-tinta-suave">
+      Tocá <strong>Imprimir prueba</strong> para ver si en esta computadora la comanda sale sola.
+    </p>
+  );
+}
+
 function Contenido({ onCerrar }) {
   const [config, setConfig] = useState(leerConfigImpresora);
   const set = (cambios) => setConfig((c) => ({ ...c, ...cambios }));
@@ -74,6 +108,8 @@ function Contenido({ onCerrar }) {
 
   return (
     <div className="space-y-4">
+      <EstadoImpresion />
+
       <div>
         <span className="etiqueta">Ancho del papel</span>
         <div className="grid grid-cols-2 gap-2">
@@ -97,6 +133,12 @@ function Contenido({ onCerrar }) {
           onCambio={(v) => set({ comandaAlLlegar: v })}
           titulo="Imprimir la comanda apenas llega un pedido web"
           detalle="Sale sola cada orden nueva de la carta, aunque todavía no la confirmes."
+        />
+        <Opcion
+          marcado={config.comandaKiosco}
+          onCambio={(v) => set({ comandaKiosco: v })}
+          titulo="También si el pedido es solo de bebidas o golosinas"
+          detalle="Destildado: un pedido que es todo de kiosco no imprime comanda para la cocina."
         />
         <Opcion
           marcado={config.comandaAlConfirmar}
@@ -146,9 +188,25 @@ function Contenido({ onCerrar }) {
           </li>
         </Paso>
         <Paso titulo="3. Imprimir directo, sin el cuadro de diálogo">
+          <li>
+            Una página web no puede imprimir sola: Chrome siempre pregunta, salvo que se abra con un permiso especial. Eso hace este acceso
+            directo.
+          </li>
           <li>Click derecho en el escritorio → Nuevo → Acceso directo, y pegá esto como ubicación:</li>
           <AccesoDirecto />
-          <li>Cerrá Chrome del todo (también el ícono junto al reloj) y abrí el panel siempre desde ese acceso directo.</li>
+          <li>
+            Ponele de nombre "Panel Palmeras" y abrilo. Se abre en una ventana aparte: entrá con el usuario y la contraseña (solo la primera
+            vez).
+          </li>
+          <li>
+            Usá siempre esa ventana para el panel. Puede quedar detrás de otras, pero <strong>no la cierres ni la minimices</strong> mientras
+            se reciben pedidos. El Chrome de siempre (YouTube, WhatsApp) se sigue usando aparte.
+          </li>
+          <li>Tocá Imprimir prueba desde esa ventana: arriba tiene que decir "Imprime directo".</li>
+          <li>
+            Si Windows dice que no encuentra el archivo, Chrome está en otra carpeta: click derecho en el ícono de Chrome → Propiedades, y
+            usá esa ruta en lugar de la primera parte.
+          </li>
         </Paso>
       </div>
 

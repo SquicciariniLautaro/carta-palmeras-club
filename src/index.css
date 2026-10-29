@@ -25,6 +25,8 @@
   --color-noche-suave: #e3e7f1;
   --color-mediodia: #b45309;
   --color-mediodia-suave: #fbecd3;
+  --color-cancha: #2f6b3a;        /* cancha de fútbol: verde césped */
+  --color-cancha-suave: #e2efdc;
 
   --animate-balanceo: balanceo 1.6s ease-in-out infinite;
   /* Tablero de pedidos: cada estado tiene su movimiento para que nada pase desapercibido */

@@ -24,6 +24,7 @@ const formatoFechaHora = new Intl.DateTimeFormat("es-AR", {
   year: "2-digit",
   hour: "2-digit",
   minute: "2-digit",
+  hourCycle: "h23", // 21:15 y no 9:15 p. m.
 });
 
 export function formatearFechaHora(iso) {
@@ -71,7 +72,7 @@ export function formatearPesos(numero) {
 }
 
 const formatoFecha = new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
-const formatoHora = new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit" });
+const formatoHora = new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 
 // Acepta un ISO, un Date o una fecha "2026-10-16" (sin hora: se toma como día local)
 function aFecha(valor) {

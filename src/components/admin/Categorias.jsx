@@ -4,7 +4,7 @@ import { supabase, mensajeDeError } from "../../lib/supabase";
 import { IconoBasura, IconoFlechaAbajo, IconoFlechaArriba, IconoMas } from "../ui/Iconos";
 import Confirmar from "../ui/Confirmar";
 
-function FilaCategoria({ categoria, cantidad, esPrimera, esUltima, onRenombrar, onMover, onBorrar }) {
+function FilaCategoria({ categoria, cantidad, esPrimera, esUltima, onRenombrar, onMover, onKiosco, onBorrar }) {
   const [nombre, setNombre] = useState(categoria.nombre);
   const [original, setOriginal] = useState(categoria.nombre);
   if (categoria.nombre !== original) {
@@ -53,6 +53,18 @@ function FilaCategoria({ categoria, cantidad, esPrimera, esUltima, onRenombrar, 
         onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
         aria-label={`Nombre de la categoría ${categoria.nombre}`}
       />
+      <label
+        className="flex items-center gap-1.5 text-xs text-tinta-suave"
+        title="Bebidas, golosinas: llevan stock y no necesitan comanda de cocina"
+      >
+        <input
+          type="checkbox"
+          className="size-4 accent-palmera"
+          checked={Boolean(categoria.controla_stock)}
+          onChange={(e) => onKiosco(e.target.checked)}
+        />
+        Kiosco (con stock)
+      </label>
       <span className="w-24 text-right text-xs text-tinta-suave">
         {cantidad} {cantidad === 1 ? "comida" : "comidas"}
       </span>
@@ -101,6 +113,13 @@ export default function Categorias({ turno = "noche", categorias, comidas, onCam
     onCambio();
   }
 
+  async function marcarKiosco(categoria, valor) {
+    const { error } = await supabase.from("categorias").update({ controla_stock: valor }).eq("id", categoria.id);
+    if (error) toast.error(mensajeDeError(error, "No se pudo guardar."));
+    else toast.success(valor ? `"${categoria.nombre}" lleva stock y no pide comanda` : `"${categoria.nombre}" ya no lleva stock`);
+    onCambio();
+  }
+
   // Intercambia el orden con la vecina y renumera todo 1..N
   async function mover(indice, direccion) {
     const lista = [...categorias];
@@ -141,6 +160,10 @@ export default function Categorias({ turno = "noche", categorias, comidas, onCam
             ? "El orden de esta lista es el orden de los filtros del catálogo. Solo se pueden borrar categorías sin comidas."
             : "Categorías del menú del mediodía (por ejemplo: Platos del día, Minutas, Postres). Solo se pueden borrar si no tienen platos."}
         </p>
+        <p className="mt-1 text-sm text-tinta-suave">
+          Marcá como <strong>Kiosco</strong> las de bebidas y golosinas: son las únicas que llevan stock, y si una venta es solo de eso la
+          comanda de cocina es opcional.
+        </p>
       </div>
 
       <form onSubmit={crear} className="flex gap-2">
@@ -173,6 +196,7 @@ export default function Categorias({ turno = "noche", categorias, comidas, onCam
               esUltima={i === categorias.length - 1}
               onRenombrar={(nombre) => renombrar(c, nombre)}
               onMover={(dir) => mover(i, dir)}
+              onKiosco={(valor) => marcarKiosco(c, valor)}
               onBorrar={() => setABorrar(c)}
             />
           ))}

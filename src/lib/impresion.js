@@ -2,20 +2,43 @@
 // Se arma el ticket en un contenedor que solo se ve al imprimir y se llama a
 // window.print(): sin ventanas emergentes ni librerías.
 //
-// Para que imprima directo, sin el cuadro de diálogo, abrí el panel en Chrome
-// con la opción --kiosk-printing y la ticketera como impresora predeterminada.
+// Ninguna página web puede imprimir sola: Chrome siempre muestra el cuadro de
+// impresión, salvo que se abra con --kiosk-printing (ver ConfigImpresora).
+// Por eso medimos cuánto tarda window.print(): si tarda, hubo cuadro y el
+// panel avisa que falta abrirlo desde el acceso directo.
 import { NEGOCIO } from "../config";
 import { formatearFechaHora, formatearPesos } from "./formato";
 import { METODOS_PAGO, TURNOS, esEnvio } from "../components/admin/ventasUtils";
 
 const CLAVE = "palmeras.impresora";
+const CLAVE_MODO = "palmeras.impresion.modo";
+export const EVENTO_MODO = "palmeras:modo-impresion";
 
 export const CONFIG_IMPRESORA = Object.freeze({
   ancho: 80, // mm del papel: 80 o 58
   comandaAlConfirmar: true, // imprime la comanda de cocina al confirmar un pedido
   comandaAlLlegar: false, // imprime la comanda apenas entra un pedido web
+  comandaKiosco: false, // también si el pedido es solo de bebidas o golosinas
   ticketAlCobrar: false, // imprime el ticket del cliente al cobrar
 });
+
+// "directa" (sale sola), "dialogo" (Chrome pidió confirmar) o null (sin probar)
+export function leerModoImpresion() {
+  try {
+    return localStorage.getItem(CLAVE_MODO);
+  } catch {
+    return null;
+  }
+}
+
+function guardarModo(modo) {
+  try {
+    localStorage.setItem(CLAVE_MODO, modo);
+  } catch {
+    // modo privado: igual avisamos en esta sesión
+  }
+  window.dispatchEvent(new CustomEvent(EVENTO_MODO, { detail: modo }));
+}
 
 export function leerConfigImpresora() {
   try {
@@ -41,7 +64,27 @@ function esc(texto) {
     .replaceAll('"', "&quot;");
 }
 
+// Si window.print() tarda más que esto, se abrió el cuadro de impresión
+const TARDA_CON_DIALOGO_MS = 1500;
+
+// Cola: si llegan dos pedidos juntos, cada comanda sale entera y en orden
+// (antes la segunda podía pisar a la primera mientras se imprimía).
+const cola = [];
+let imprimiendo = false;
+
 function imprimirHtml(html) {
+  cola.push(html);
+  if (!imprimiendo) siguiente();
+}
+
+function siguiente() {
+  const html = cola.shift();
+  if (html === undefined) {
+    imprimiendo = false;
+    return;
+  }
+  imprimiendo = true;
+
   const { ancho } = leerConfigImpresora();
   let zona = document.getElementById("zona-impresion");
   if (!zona) {
@@ -60,17 +103,27 @@ function imprimirHtml(html) {
   zona.innerHTML = html;
   document.body.classList.add("imprimiendo");
 
-  const limpiar = () => {
+  let terminado = false;
+  let reserva = 0;
+  const terminar = () => {
+    if (terminado) return;
+    terminado = true;
+    window.removeEventListener("afterprint", terminar);
+    clearTimeout(reserva);
     document.body.classList.remove("imprimiendo");
     zona.innerHTML = "";
-    window.removeEventListener("afterprint", limpiar);
+    setTimeout(siguiente, 300);
   };
-  window.addEventListener("afterprint", limpiar);
-  // Esperamos un cuadro para que el navegador aplique los estilos
-  requestAnimationFrame(() => {
+  window.addEventListener("afterprint", terminar);
+  // setTimeout y no requestAnimationFrame: con la pestaña en segundo plano
+  // los cuadros no se dibujan y la comanda quedaba esperando hasta volver.
+  setTimeout(() => {
+    void zona.offsetHeight; // aplica los estilos antes de imprimir
+    const inicio = performance.now();
     window.print();
-    setTimeout(limpiar, 60_000);
-  });
+    guardarModo(performance.now() - inicio > TARDA_CON_DIALOGO_MS ? "dialogo" : "directa");
+    reserva = setTimeout(terminar, 60_000); // por si el navegador no avisa que terminó
+  }, 50);
 }
 
 function lineaEntrega(venta) {

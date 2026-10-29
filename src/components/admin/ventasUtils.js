@@ -2,10 +2,49 @@ import { claveDia, fechaInput, precioFinal } from "../../lib/formato";
 import { opcionesDe } from "../../lib/opciones";
 
 // Turnos del negocio. La noche es la carta online; el mediodía es solo de uso interno.
+// "cancha" son los cobros de los turnos de la cancha de fútbol (sección Cancha).
 export const TURNOS = {
   noche: { nombre: "Venta noche", corto: "Noche", detalle: "Carta online y pedidos por WhatsApp" },
   mediodia: { nombre: "Venta mediodía", corto: "Mediodía", detalle: "Menú del mediodía · uso interno" },
+  cancha: { nombre: "Cancha", corto: "Cancha", detalle: "Alquiler de la cancha de fútbol" },
 };
+
+// Comidas de las categorías de kiosco (bebidas, golosinas): llevan stock y
+// no pasan por la cocina.
+export function idsDeKiosco(categorias, comidas) {
+  const kiosco = new Set(categorias.filter((c) => c.controla_stock).map((c) => c.id));
+  return new Set(comidas.filter((c) => kiosco.has(c.categoria_id)).map((c) => c.id));
+}
+
+// ¿Hace falta la comanda? Solo si hay algo que no sea de kiosco
+export function necesitaCocina(items, kiosco) {
+  return items.some((i) => !i.comida_id || !kiosco.has(i.comida_id));
+}
+
+// Stock que se muestra: solo en categorías de kiosco y si está cargado
+export function stockDe(comida, kiosco) {
+  return kiosco.has(comida.id) && comida.stock != null ? comida.stock : null;
+}
+
+// "sin" (0 o menos), "bajo" (llegó al mínimo), "ok" o null (sin cargar)
+export function estadoStock(comida) {
+  if (comida.stock == null) return null;
+  if (comida.stock <= 0) return "sin";
+  if (comida.stock <= (comida.stock_minimo ?? 5)) return "bajo";
+  return "ok";
+}
+
+export const ESTADOS_STOCK = {
+  sin: { nombre: "Sin stock", clase: "bg-brasa/15 text-brasa" },
+  bajo: { nombre: "Queda poco", clase: "bg-amber-100 text-amber-900" },
+  ok: { nombre: "Hay", clase: "bg-emerald-100 text-emerald-900" },
+};
+
+// Comidas de kiosco con stock bajo o sin stock (para el aviso del panel)
+export function conStockBajo(categorias, comidas) {
+  const kiosco = idsDeKiosco(categorias, comidas);
+  return comidas.filter((c) => kiosco.has(c.id) && c.activo && ["sin", "bajo"].includes(estadoStock(c)));
+}
 
 // Recorrido de un pedido: nuevo → en preparación → en camino → entregado → cobrado.
 // "Cobrado" (cerrado) = se registró el pago: solo esas ventas cuentan en la facturación.

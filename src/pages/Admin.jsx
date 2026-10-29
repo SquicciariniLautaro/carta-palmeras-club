@@ -7,7 +7,7 @@ import Logo from "../components/ui/Logo";
 
 // /admin: decide entre el login, "sin permisos" y el panel
 export default function Admin() {
-  const { sesion, cargando, esAdmin, errorChequeo } = useSesion();
+  const { sesion, cargando, esAdmin, rol, errorChequeo } = useSesion();
 
   if (cargando) return <Cargando texto="Verificando sesión…" />;
   if (!sesion) return <Login />;
@@ -32,5 +32,5 @@ export default function Admin() {
     );
   }
 
-  return <Panel sesion={sesion} />;
+  return <Panel sesion={sesion} rol={rol} />;
 }

@@ -6,6 +6,7 @@ import { descargarExcel } from "../../lib/excel";
 import { hojaArqueos } from "../../lib/reportes";
 import { imprimirArqueo } from "../../lib/impresion";
 import { useCaja } from "../../hooks/useCaja";
+import { nombreUsuario, useRol } from "../../hooks/useRol";
 import { IconoAlerta, IconoBasura, IconoCaja, IconoCandado, IconoExcel, IconoImpresora, IconoMas, IconoOjo } from "../ui/Iconos";
 import Cargando from "../ui/Cargando";
 import Confirmar from "../ui/Confirmar";
@@ -53,6 +54,7 @@ function DesgloseArqueo({ r }) {
         <Fila texto={`Total vendido · ${r.cantidad_ventas ?? 0} ventas`} valor={r.total_vendido} fuerte />
         <Fila texto="Venta noche" valor={r.vendido_noche} claro />
         <Fila texto="Venta mediodía" valor={r.vendido_mediodia} claro />
+        {Number(r.vendido_cancha) > 0 && <Fila texto="Cancha" valor={r.vendido_cancha} claro />}
         <Fila texto="Transferencias recibidas (ventas + cuentas)" valor={r.total_transferencias} claro />
       </div>
     </div>
@@ -115,6 +117,7 @@ function AbrirCaja({ onAbierta }) {
 
 function CajaAbierta({ caja, actualizacion, onCambio }) {
   const { recargar: recargarCaja } = useCaja();
+  const { esDueno } = useRol();
   const [datos, setDatos] = useState({ clave: null, resumen: null, movimientos: [], huerfanos: [], pendientes: 0, error: null });
   const [vuelta, setVuelta] = useState(0);
   const [movimiento, setMovimiento] = useState({ tipo: "retiro", concepto: "", monto: "" });
@@ -129,7 +132,7 @@ function CajaAbierta({ caja, actualizacion, onCambio }) {
     let activo = true;
     Promise.all([
       supabase.rpc("resumen_caja", { caja_id: caja.id }),
-      supabase.from("pagos").select("id, created_at, metodo, monto, concepto, ventas(numero, turno), clientes(nombre)").eq("caja_id", caja.id).order("created_at", { ascending: false }),
+      supabase.from("pagos").select("id, created_at, metodo, monto, concepto, nota, usuario, ventas(numero, turno), clientes(nombre)").eq("caja_id", caja.id).order("created_at", { ascending: false }),
       supabase.from("caja_movimientos").select("*").eq("caja_id", caja.id).order("created_at", { ascending: false }),
       supabase.from("gastos").select("id, created_at, descripcion, categoria, monto").eq("caja_id", caja.id).order("created_at", { ascending: false }),
       supabase.from("pagos").select("id, monto").is("caja_id", null),
@@ -142,7 +145,11 @@ function CajaAbierta({ caja, actualizacion, onCambio }) {
           id: `p-${p.id}`,
           fecha: p.created_at,
           texto: p.concepto === "cobro_cuenta" ? `Pago de cuenta corriente · ${p.clientes?.nombre ?? ""}` : `Venta #${p.ventas?.numero ?? "—"} · ${TURNOS[p.ventas?.turno]?.corto ?? ""}`,
-          detalle: METODOS_PAGO[p.metodo]?.nombre + (p.clientes?.nombre && p.concepto === "venta" ? ` · ${p.clientes.nombre}` : ""),
+          detalle:
+            (p.nota === "Seña" ? "Seña · " : "") +
+            METODOS_PAGO[p.metodo]?.nombre +
+            (p.clientes?.nombre && p.concepto === "venta" ? ` · ${p.clientes.nombre}` : "") +
+            ` · cobró ${nombreUsuario(p.usuario)}`,
           monto: Number(p.monto),
           signo: p.metodo === "cuenta_corriente" ? "" : "+",
         })),
@@ -151,7 +158,7 @@ function CajaAbierta({ caja, actualizacion, onCambio }) {
           idMovimiento: m.id,
           fecha: m.created_at,
           texto: m.concepto,
-          detalle: m.tipo === "ingreso" ? "Ingreso de efectivo" : "Retiro de efectivo",
+          detalle: `${m.tipo === "ingreso" ? "Ingreso de efectivo" : "Retiro de efectivo"} · ${nombreUsuario(m.usuario)}`,
           monto: Number(m.monto),
           signo: m.tipo === "ingreso" ? "+" : "−",
         })),
@@ -323,7 +330,10 @@ function CajaAbierta({ caja, actualizacion, onCambio }) {
               <IconoMas className="size-4" /> Agregar
             </button>
           </form>
-          <p className="text-xs text-tinta-suave">Los gastos pagados con la plata de la caja se cargan en Gastos y costos (quedan acá solos).</p>
+          <p className="text-xs text-tinta-suave">
+            Los gastos pagados con la plata de la caja los carga el dueño en Gastos y costos (quedan acá solos). Para sacar plata por otro
+            motivo, usá Retiro.
+          </p>
           {datos.movimientos.length === 0 ? (
             <p className="rounded-xl bg-fondo p-4 text-center text-sm text-tinta-suave">Todavía no hay movimientos.</p>
           ) : (
@@ -340,7 +350,7 @@ function CajaAbierta({ caja, actualizacion, onCambio }) {
                     <span className={`cifras font-semibold ${m.signo === "−" ? "text-rojo" : m.signo === "+" ? "text-emerald-700" : "text-tinta-suave"}`}>
                       {m.signo} {formatearPesos(m.monto)}
                     </span>
-                    {m.idMovimiento && (
+                    {m.idMovimiento && esDueno && (
                       <button
                         type="button"
                         className="rounded p-1 text-tinta-suave hover:bg-borde hover:text-rojo"
@@ -453,6 +463,7 @@ function CajaAbierta({ caja, actualizacion, onCambio }) {
 }
 
 function HistorialArqueos({ vuelta, onCambio }) {
+  const { esDueno } = useRol();
   const [rango, setRango] = useState("mes");
   const periodo = useMemo(() => calcularRango(rango), [rango]);
   const [resultado, setResultado] = useState({ clave: null, cajas: [], error: null });
@@ -559,9 +570,11 @@ function HistorialArqueos({ vuelta, onCambio }) {
                         <button type="button" className="boton-secundario px-2.5 py-1.5" onClick={() => imprimirArqueo(c)} aria-label={`Imprimir arqueo ${c.numero}`} title="Imprimir">
                           <IconoImpresora className="size-4" />
                         </button>
-                        <button type="button" className="boton-secundario px-2.5 py-1.5 hover:text-rojo" onClick={() => setABorrar(c)} aria-label={`Borrar arqueo ${c.numero}`} title="Borrar">
-                          <IconoBasura className="size-4" />
-                        </button>
+                        {esDueno && (
+                          <button type="button" className="boton-secundario px-2.5 py-1.5 hover:text-rojo" onClick={() => setABorrar(c)} aria-label={`Borrar arqueo ${c.numero}`} title="Borrar">
+                            <IconoBasura className="size-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

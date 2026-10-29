@@ -7,6 +7,8 @@ import { IconoBasura, IconoBuscar, IconoEditar, IconoEstrella, IconoMas } from "
 import Cargando from "../ui/Cargando";
 import Confirmar from "../ui/Confirmar";
 import FormComida from "./FormComida";
+import { ESTADOS_STOCK, estadoStock, idsDeKiosco } from "./ventasUtils";
+import { useRol } from "../../hooks/useRol";
 
 function Interruptor({ activo, onCambiar, etiqueta }) {
   return (
@@ -27,6 +29,7 @@ function Interruptor({ activo, onCambiar, etiqueta }) {
 
 export default function ListaComidas({ turno = "noche", comidas, categorias, cargando, onCambio }) {
   const conCarta = turno === "noche";
+  const { esDueno } = useRol();
   const [busqueda, setBusqueda] = useState("");
   const [categoriaFiltro, setCategoriaFiltro] = useState("");
   const [editando, setEditando] = useState(null); // null | "nueva" | comida
@@ -34,6 +37,7 @@ export default function ListaComidas({ turno = "noche", comidas, categorias, car
   const [borrando, setBorrando] = useState(false);
 
   const nombreCategoria = useMemo(() => new Map(categorias.map((c) => [c.id, c.nombre])), [categorias]);
+  const kiosco = useMemo(() => idsDeKiosco(categorias, comidas), [categorias, comidas]);
 
   const filtradas = useMemo(() => {
     const texto = normalizarTexto(busqueda);
@@ -84,6 +88,7 @@ export default function ListaComidas({ turno = "noche", comidas, categorias, car
               : "Uso interno: no aparecen en la carta online y no llevan foto."}
           </p>
         </div>
+        {esDueno ? (
         <button
           type="button"
           className="boton-primario"
@@ -93,6 +98,9 @@ export default function ListaComidas({ turno = "noche", comidas, categorias, car
         >
           <IconoMas className="size-4" /> {conCarta ? "Nueva comida" : "Nuevo plato"}
         </button>
+        ) : (
+          <p className="max-w-xs text-xs text-tinta-suave">Los productos y los precios los cambia el dueño. Vos marcás si hay o no hay.</p>
+        )}
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row">
@@ -155,7 +163,16 @@ export default function ListaComidas({ turno = "noche", comidas, categorias, car
                   {c.destacado && <IconoEstrella className="size-3.5 shrink-0 text-palmera" />}
                   <span className="truncate">{c.nombre}</span>
                 </p>
-                <p className="text-xs text-tinta-suave">{nombreCategoria.get(c.categoria_id) ?? "Sin categoría"}</p>
+                <p className="text-xs text-tinta-suave">
+                  {nombreCategoria.get(c.categoria_id) ?? "Sin categoría"}
+                  {kiosco.has(c.id) && (
+                    <span
+                      className={`ml-2 rounded-full px-2 py-0.5 font-semibold ${ESTADOS_STOCK[estadoStock(c)]?.clase ?? "bg-borde text-tinta-suave"}`}
+                    >
+                      {c.stock == null ? "Stock sin cargar" : c.stock <= 0 ? `Sin stock (${c.stock})` : `Stock: ${c.stock}`}
+                    </span>
+                  )}
+                </p>
               </div>
 
               <div className="col-span-2 text-sm lg:col-span-1">
@@ -168,7 +185,7 @@ export default function ListaComidas({ turno = "noche", comidas, categorias, car
               </div>
 
               {conCarta && (
-              <label className="flex items-center gap-2 text-xs text-tinta-suave">
+              <label className={`flex items-center gap-2 text-xs text-tinta-suave ${esDueno ? "" : "invisible"}`}>
                 <Interruptor
                   activo={c.destacado}
                   etiqueta={`Destacado: ${c.nombre}`}
@@ -197,7 +214,7 @@ export default function ListaComidas({ turno = "noche", comidas, categorias, car
                 {conCarta ? "Activo" : "Disponible"}
               </label>
 
-              <div className={`flex justify-end gap-2 lg:col-span-1 ${conCarta ? "col-span-2" : ""}`}>
+              <div className={`flex justify-end gap-2 lg:col-span-1 ${conCarta ? "col-span-2" : ""} ${esDueno ? "" : "invisible"}`}>
                 <button type="button" className="boton-secundario px-3 py-2" onClick={() => setEditando(c)}>
                   <IconoEditar className="size-4" /> Editar
                 </button>

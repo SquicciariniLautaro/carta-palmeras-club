@@ -24,7 +24,9 @@ import {
   calcularRango,
   facturacionPorDia,
   hoyInput,
+  idsDeKiosco,
   masVendidas,
+  necesitaCocina,
   nombreEstado,
   sufijoArchivo,
   textoPagos,
@@ -34,7 +36,7 @@ import {
 
 const LIMITE_VENTAS = 2000;
 const LIMITE_ABIERTOS = 200;
-const COLUMNAS_VENTA = "*, venta_items(*), pagos(id, metodo, monto, cliente_id, clientes(nombre))";
+const COLUMNAS_VENTA = "*, venta_items(*), pagos(id, metodo, monto, cliente_id, usuario, clientes(nombre))";
 
 async function obtenerVentas(turno, { desde, hasta }) {
   const { data, error } = await supabase
@@ -80,7 +82,7 @@ const FILTROS_ESTADO = [
 
 // actualizacion: cambia cuando el panel se entera de pedidos nuevos o modificados (tiempo real)
 // onCambio: avisa al panel que hubo un cambio acá (para los contadores)
-export default function VentasTurno({ turno, comidas, menuHoy, actualizacion = 0, onCambio }) {
+export default function VentasTurno({ turno, comidas, categorias = [], menuHoy, actualizacion = 0, onCambio }) {
   const [rango, setRango] = useState("hoy");
   const [desdeTexto, setDesdeTexto] = useState(() => fechaInput(Date.now() - 6 * 864e5));
   const [hastaTexto, setHastaTexto] = useState(hoyInput);
@@ -100,6 +102,7 @@ export default function VentasTurno({ turno, comidas, menuHoy, actualizacion = 0
   const [exportando, setExportando] = useState(false);
 
   const periodo = useMemo(() => calcularRango(rango, desdeTexto, hastaTexto), [rango, desdeTexto, hastaTexto]);
+  const kiosco = useMemo(() => idsDeKiosco(categorias, comidas), [categorias, comidas]);
   const vuelta = `${turno}-${recarga}-${actualizacion}`;
   const clave = periodo ? `${periodo.desde.getTime()}-${periodo.hasta.getTime()}-${vuelta}` : null;
 
@@ -180,7 +183,9 @@ export default function VentasTurno({ turno, comidas, menuHoy, actualizacion = 0
     const actualizada = { ...venta, estado };
     toast.success(`Pedido #${venta.numero}: ${nombreEstado(actualizada)}`);
     const config = leerConfigImpresora();
-    if (estado === "en_preparacion" && config.comandaAlConfirmar) imprimirComanda(venta);
+    // Un pedido solo de bebidas o golosinas no va a la cocina (salvo que se pida en Ticketera)
+    const paraCocina = config.comandaKiosco || necesitaCocina(venta.venta_items ?? [], kiosco);
+    if (estado === "en_preparacion" && config.comandaAlConfirmar && paraCocina) imprimirComanda(venta);
     // Al confirmar un pedido web se abre el mensaje para avisarle al cliente
     if (venta.origen === "web" && estado === "en_preparacion") setAviso({ venta: actualizada, plantilla: "confirmado" });
     if (venta.origen === "web" && estado === "enviado") {
@@ -513,6 +518,7 @@ export default function VentasTurno({ turno, comidas, menuHoy, actualizacion = 0
         abierto={ventaAbierta}
         turno={turno}
         comidas={comidas}
+        kiosco={kiosco}
         menuHoy={menuHoy}
         onCerrar={() => setVentaAbierta(false)}
         onRegistrada={() => {
