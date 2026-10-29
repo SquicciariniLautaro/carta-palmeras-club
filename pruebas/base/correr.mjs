@@ -274,6 +274,31 @@ await prueba("el dueño ve quién hizo cada cosa", async () => {
   if (faltan.length) throw new Error("faltan: " + faltan.map(([u, a]) => `${a} (${u ?? "carta"})`).join(", "));
 });
 
+// ---------------------------------------------------------------------------
+console.log("\nPlatos del mediodía sin precio");
+const POLLO_LIMON = await id("Pollo al limón");
+await prueba("se cargan los 44 platos en 5 categorías, sin precio y no disponibles", async () => {
+  const filas = await q(`select c.nombre, count(*)::int as n, bool_and(m.precio is null and not m.activo and m.turno = 'mediodia') as ok
+                           from comidas m join categorias c on c.id = m.categoria_id
+                          where c.turno = 'mediodia' group by c.nombre`);
+  const por = Object.fromEntries(filas.map((f) => [f.nombre, f.n]));
+  igual(J(por), J({ ...por, Pollo: 10, Carnes: 12, "Guisos y estofados": 5, Pastas: 9, "Al horno y rellenos": 8 }), "platos por categoría");
+  igual(filas.every((f) => f.ok), true, "sin precio y no disponibles");
+});
+await prueba("la carga no anota 44 líneas en la actividad", async () => {
+  igual((await uno("select count(*)::int as n from actividad where accion = 'Creó un producto' and detalle in (select nombre from comidas where turno = 'mediodia')")).n, 0, "líneas");
+});
+await rechaza("el empleado no lo puede marcar disponible sin precio", () =>
+  como(EMPLEADO, () => q("update comidas set activo = true where id = $1", [POLLO_LIMON])), "comidas_precio_activo_check");
+await rechaza("no se puede vender sin precio", () =>
+  como(EMPLEADO, () => uno("select registrar_venta_local($1::jsonb, 'mediodia', null, null, null) as r", [J([{ comida_id: POLLO_LIMON, cantidad: 1 }])])), "precio_unitario");
+await prueba("el dueño le pone precio y queda disponible", async () => {
+  await como(DUENO, () => q("update comidas set precio = 9000, activo = true where id = $1", [POLLO_LIMON]));
+  const r = await como(EMPLEADO, () => uno("select registrar_venta_local($1::jsonb, 'mediodia', null, null, null) as r", [J([{ comida_id: POLLO_LIMON, cantidad: 2 }])]));
+  igual(Number((await uno("select total from ventas where id = $1", [r.r.id ?? r.r])).total), 18000, "total");
+  igual((await uno("select detalle from actividad where accion = 'Cambió el precio' order by id desc limit 1")).detalle, "Pollo al limón · sin precio → $ 9000.00", "actividad");
+});
+
 const { fallas, total } = resultado();
 console.log(fallas ? `\n${fallas} de ${total} pruebas fallaron\n` : `\nLas ${total} pruebas dieron bien\n`);
 process.exit(fallas ? 1 : 0);

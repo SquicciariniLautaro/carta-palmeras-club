@@ -116,6 +116,7 @@ export function entradasDeComidas(comidas) {
   for (const c of [...comidas].sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))) {
     const { variantes } = opcionesDe(c);
     if (variantes.length === 0) {
+      if (c.precio == null) continue; // todavía sin precio: no se puede vender
       lista.push({ valor: c.id, comida: c, variante: null, nombre: c.nombre, precio: precioFinal(c) });
     } else {
       for (const v of variantes) {

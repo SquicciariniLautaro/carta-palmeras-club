@@ -16,7 +16,8 @@ function valoresIniciales(comida, categorias) {
     precio: comida?.precio != null ? String(Number(comida.precio)) : "",
     precio_promo: comida?.precio_promo != null ? String(Number(comida.precio_promo)) : "",
     destacado: comida?.destacado ?? false,
-    activo: comida?.activo ?? true,
+    // Si todavía no tiene precio, al ponérselo queda disponible
+    activo: comida?.precio == null ? true : comida.activo,
     stock_minimo: String(comida?.stock_minimo ?? 5),
     opciones: opcionesIniciales(comida),
   };
