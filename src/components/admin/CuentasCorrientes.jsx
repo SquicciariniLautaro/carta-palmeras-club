@@ -5,6 +5,7 @@ import { formatearFechaHora, formatearPesos, normalizarTexto } from "../../lib/f
 import { descargarExcel } from "../../lib/excel";
 import { hojaCuentas, hojaEstadoCuenta } from "../../lib/reportes";
 import { useCaja, useClientes } from "../../hooks/useCaja";
+import { useRol } from "../../hooks/useRol";
 import { IconoBuscar, IconoCheck, IconoEditar, IconoExcel, IconoMas, IconoOjo, IconoUsuario } from "../ui/Iconos";
 import Cargando from "../ui/Cargando";
 import Confirmar from "../ui/Confirmar";
@@ -15,6 +16,7 @@ import { TURNOS } from "./ventasUtils";
 const CLIENTE_VACIO = { nombre: "", telefono: "", documento: "", limite_credito: "", notas: "" };
 
 function FormCliente({ cliente, onCerrar, onGuardado }) {
+  const { esDueno } = useRol();
   const [v, setV] = useState(() =>
     cliente
       ? {
@@ -68,8 +70,10 @@ function FormCliente({ cliente, onCerrar, onGuardado }) {
       </div>
       <label className="block">
         <span className="etiqueta">Límite de crédito (opcional)</span>
-        <input type="number" min="0" step="0.01" inputMode="decimal" className="campo cifras" placeholder="Sin límite" value={v.limite_credito} onChange={cambiar("limite_credito")} />
-        <span className="mt-1 block text-xs text-tinta-suave">Si lo ponés, no se le puede fiar por encima de ese monto.</span>
+        <input type="number" min="0" step="0.01" inputMode="decimal" className="campo cifras" placeholder="Sin límite" value={v.limite_credito} onChange={cambiar("limite_credito")} disabled={!esDueno} />
+        <span className="mt-1 block text-xs text-tinta-suave">
+          {esDueno ? "Si lo ponés, no se le puede fiar por encima de ese monto." : "El límite lo define el dueño."}
+        </span>
       </label>
       <label className="block">
         <span className="etiqueta">Notas</span>
@@ -112,6 +116,7 @@ function armarMovimientos(pagos) {
 }
 
 function DetalleCuenta({ cliente, onCerrar, onCambio, onEditar }) {
+  const { esDueno } = useRol();
   const { caja } = useCaja();
   const [resultado, setResultado] = useState({ vuelta: null, pagos: [], error: null });
   const [vuelta, setVuelta] = useState(0);
@@ -280,9 +285,13 @@ function DetalleCuenta({ cliente, onCerrar, onCambio, onEditar }) {
       </div>
 
       <div className="flex flex-wrap justify-between gap-2 border-t border-borde pt-3">
-        <button type="button" className="text-xs text-tinta-suave underline hover:text-tinta" onClick={cambiarActivo}>
-          {cliente.activo ? "Dar de baja (no fiarle más)" : "Reactivar cliente"}
-        </button>
+        {esDueno ? (
+          <button type="button" className="text-xs text-tinta-suave underline hover:text-tinta" onClick={cambiarActivo}>
+            {cliente.activo ? "Dar de baja (no fiarle más)" : "Reactivar cliente"}
+          </button>
+        ) : (
+          <span />
+        )}
         <button type="button" className="boton-secundario" onClick={onCerrar}>
           Listo
         </button>

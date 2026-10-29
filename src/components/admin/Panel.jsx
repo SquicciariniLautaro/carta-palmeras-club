@@ -1,13 +1,26 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { supabase, mensajeDeError } from "../../lib/supabase";
 import { formatearPrecio } from "../../lib/formato";
 import { prepararSonido, sonarAviso } from "../../lib/sonido";
-import { imprimirComanda, leerConfigImpresora } from "../../lib/impresion";
+import { EVENTO_MODO, imprimirComanda, leerConfigImpresora, leerModoImpresion } from "../../lib/impresion";
 import { usePedidosEnVivo } from "../../hooks/usePedidosEnVivo";
 import { useCaja } from "../../hooks/useCaja";
+import { RolContext } from "../../hooks/useRol";
 import Logo from "../ui/Logo";
-import { IconoBilletera, IconoCaja, IconoCampana, IconoGrafico, IconoImpresora, IconoLibreta, IconoLuna, IconoSol } from "../ui/Iconos";
+import {
+  IconoAlerta,
+  IconoBilletera,
+  IconoCaja,
+  IconoCampana,
+  IconoGrafico,
+  IconoImpresora,
+  IconoLibreta,
+  IconoLuna,
+  IconoPelota,
+  IconoReloj,
+  IconoSol,
+} from "../ui/Iconos";
 import CajaProvider from "./CajaProvider";
 import Turno from "./Turno";
 import Caja from "./Caja";
@@ -15,15 +28,23 @@ import CuentasCorrientes from "./CuentasCorrientes";
 import Gastos from "./Gastos";
 import Finanzas from "./Finanzas";
 import ConfigImpresora from "./ConfigImpresora";
+import Cancha from "./Cancha";
+import Actividad from "./Actividad";
+import { conStockBajo, idsDeKiosco, necesitaCocina } from "./ventasUtils";
 
+// soloDueno: los empleados no la ven (la base tampoco les deja leer los gastos)
 const SECCIONES = [
   { id: "noche", nombre: "Venta noche", Icono: IconoLuna },
   { id: "mediodia", nombre: "Venta mediodía", Icono: IconoSol },
+  { id: "cancha", nombre: "Cancha", Icono: IconoPelota },
   { id: "caja", nombre: "Caja", Icono: IconoCaja },
   { id: "cuentas", nombre: "Cuentas corrientes", Icono: IconoLibreta },
-  { id: "gastos", nombre: "Gastos y costos", Icono: IconoBilletera },
-  { id: "finanzas", nombre: "Finanzas", Icono: IconoGrafico },
+  { id: "gastos", nombre: "Gastos y costos", Icono: IconoBilletera, soloDueno: true },
+  { id: "finanzas", nombre: "Finanzas", Icono: IconoGrafico, soloDueno: true },
+  { id: "actividad", nombre: "Actividad", Icono: IconoReloj, soloDueno: true },
 ];
+
+const ROLES = { dueno: "Dueño", empleado: "Empleado" };
 
 const TITULO = "Panel · Las Palmeras Club";
 
@@ -59,12 +80,26 @@ function EstadoCaja({ onIr }) {
   );
 }
 
-function PanelContenido({ sesion }) {
+function PanelContenido({ sesion, rol }) {
   const [seccion, setSeccion] = useState("noche");
+  const [subTurno, setSubTurno] = useState("ventas");
   const [datos, setDatos] = useState({ categorias: [], comidas: [], horarios: [] });
   const [estado, setEstado] = useState("cargando");
   const [permisoAvisos, setPermisoAvisos] = useState(() => (avisosDisponibles() ? Notification.permission : "denied"));
   const [impresoraAbierta, setImpresoraAbierta] = useState(false);
+  const [modoImpresion, setModoImpresion] = useState(leerModoImpresion);
+  const [avisoImpresionOculto, setAvisoImpresionOculto] = useState(false);
+  const datosRef = useRef(datos);
+  useEffect(() => {
+    datosRef.current = datos;
+  });
+
+  // Cada impresión cuenta si salió directo o con el cuadro de Chrome
+  useEffect(() => {
+    const alCambiar = (e) => setModoImpresion(e.detail);
+    window.addEventListener(EVENTO_MODO, alCambiar);
+    return () => window.removeEventListener(EVENTO_MODO, alCambiar);
+  }, []);
 
   // Recarga categorías, comidas y horarios (se usa después de cada cambio)
   const recargar = useCallback(() => {
@@ -117,7 +152,12 @@ function PanelContenido({ sesion }) {
           .select("*, venta_items(*)")
           .eq("id", p.id)
           .single()
-          .then(({ data }) => data && imprimirComanda(data));
+          .then(({ data }) => {
+            if (!data) return;
+            // Un pedido solo de bebidas o golosinas no necesita comanda de cocina
+            const { categorias, comidas } = datosRef.current;
+            if (config.comandaKiosco || necesitaCocina(data.venta_items ?? [], idsDeKiosco(categorias, comidas))) imprimirComanda(data);
+          });
       }
       if (document.hidden && avisosDisponibles() && Notification.permission === "granted") {
         new Notification(`Nuevo pedido #${p.numero}`, { body: texto, icon: `${import.meta.env.BASE_URL}favicon.png`, tag: p.id });
@@ -126,6 +166,11 @@ function PanelContenido({ sesion }) {
   }, []);
 
   const { abiertos, version, revisar } = usePedidosEnVivo(avisarNuevos);
+
+  // Cada venta mueve el stock de bebidas y golosinas: recargamos las comidas
+  useEffect(() => {
+    if (version > 0) recargar();
+  }, [version, recargar]);
   const enCurso = (turno) => abiertos.filter((p) => (p.turno ?? "noche") === turno).length;
   const nuevosSinConfirmar = abiertos.filter((p) => p.estado === "pendiente" && p.origen === "web").length;
 
@@ -156,6 +201,15 @@ function PanelContenido({ sesion }) {
   }
 
   const esTurno = seccion === "noche" || seccion === "mediodia";
+  const esDueno = rol === "dueno";
+  const secciones = SECCIONES.filter((s) => esDueno || !s.soloDueno);
+  const stockBajo = conStockBajo(datos.categorias, datos.comidas);
+
+  // Cambia de sección; en los turnos se puede abrir una pestaña de adentro (ej. Stock)
+  function irA(id, sub = "ventas") {
+    setSeccion(id);
+    setSubTurno(sub);
+  }
 
   return (
     <div className="min-h-dvh">
@@ -163,8 +217,19 @@ function PanelContenido({ sesion }) {
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-3">
             <Logo className="h-10 w-auto" />
-            <span className="hidden rounded-full bg-borde px-2 py-0.5 text-xs text-tinta-suave sm:inline">Administración</span>
-            <EstadoCaja onIr={() => setSeccion("caja")} />
+            <span className="hidden rounded-full bg-borde px-2 py-0.5 text-xs text-tinta-suave sm:inline">{ROLES[rol] ?? "Administración"}</span>
+            <EstadoCaja onIr={() => irA("caja")} />
+            {stockBajo.length > 0 && (
+              <button
+                type="button"
+                onClick={() => irA(stockBajo[0].turno ?? "noche", "stock")}
+                className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-900"
+                title={stockBajo.map((c) => `${c.nombre}: ${c.stock}`).join("\n")}
+              >
+                <IconoAlerta className="size-3.5" />
+                {stockBajo.length === 1 ? "1 producto con poco stock" : `${stockBajo.length} con poco stock`}
+              </button>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="hidden max-w-48 truncate text-xs text-tinta-suave lg:inline">{sesion.user.email}</span>
@@ -185,7 +250,7 @@ function PanelContenido({ sesion }) {
           </div>
         </div>
         <nav className="sin-scrollbar mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4" role="tablist" aria-label="Secciones del panel">
-          {SECCIONES.map(({ id, nombre, Icono }) => {
+          {secciones.map(({ id, nombre, Icono }) => {
             const cantidad = id === "noche" || id === "mediodia" ? enCurso(id) : 0;
             const alerta = id === "noche" && nuevosSinConfirmar > 0;
             return (
@@ -194,7 +259,7 @@ function PanelContenido({ sesion }) {
                 type="button"
                 role="tab"
                 aria-selected={seccion === id}
-                onClick={() => setSeccion(id)}
+                onClick={() => irA(id)}
                 className={`flex shrink-0 items-center gap-2 border-b-2 px-3 py-2.5 text-sm font-medium transition ${
                   seccion === id ? "border-palmera text-tinta" : "border-transparent text-tinta-suave hover:text-tinta"
                 }`}
@@ -226,10 +291,32 @@ function PanelContenido({ sesion }) {
               {nuevosSinConfirmar === 1 ? "Hay 1 pedido nuevo esperando confirmación" : `Hay ${nuevosSinConfirmar} pedidos nuevos esperando confirmación`}
             </p>
             {seccion !== "noche" && (
-              <button type="button" className="rounded-lg bg-white px-3 py-1 text-xs font-bold text-brasa" onClick={() => setSeccion("noche")}>
+              <button type="button" className="rounded-lg bg-white px-3 py-1 text-xs font-bold text-brasa" onClick={() => irA("noche")}>
                 Ver pedidos
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {modoImpresion === "dialogo" && !avisoImpresionOculto && (
+        <div className="border-b border-amber-300 bg-amber-50 text-amber-950">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-2">
+            <p className="flex items-center gap-2 text-sm">
+              <IconoAlerta className="size-5 shrink-0 text-amber-700" />
+              <span>
+                <strong>La comanda no sale sola:</strong> Chrome está mostrando el cuadro de impresión. Abrí el panel desde el acceso
+                directo "Panel Palmeras" para que imprima directo.
+              </span>
+            </p>
+            <div className="flex gap-2">
+              <button type="button" className="rounded-lg bg-amber-900 px-3 py-1 text-xs font-bold text-white" onClick={() => setImpresoraAbierta(true)}>
+                Cómo hacerlo
+              </button>
+              <button type="button" className="rounded-lg px-3 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-100" onClick={() => setAvisoImpresionOculto(true)}>
+                Ocultar
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -244,24 +331,32 @@ function PanelContenido({ sesion }) {
           </div>
         ) : esTurno ? (
           <Turno
-            key={seccion}
+            key={`${seccion}-${subTurno}`}
             turno={seccion}
+            subInicial={subTurno}
             datos={datos}
             cargando={estado === "cargando"}
             enCurso={enCurso(seccion)}
             actualizacion={version}
             onRecargarDatos={recargar}
-            onCambioVentas={() => revisar()}
+            onCambioVentas={() => {
+              revisar();
+              recargar(); // el stock de bebidas y golosinas cambió
+            }}
           />
+        ) : seccion === "cancha" ? (
+          <Cancha />
         ) : seccion === "caja" ? (
           <Caja actualizacion={version} />
         ) : seccion === "cuentas" ? (
           <CuentasCorrientes />
-        ) : seccion === "gastos" ? (
+        ) : seccion === "gastos" && esDueno ? (
           <Gastos />
-        ) : (
+        ) : seccion === "finanzas" && esDueno ? (
           <Finanzas />
-        )}
+        ) : seccion === "actividad" && esDueno ? (
+          <Actividad />
+        ) : null}
       </main>
 
       <ConfigImpresora abierto={impresoraAbierta} onCerrar={() => setImpresoraAbierta(false)} />
@@ -269,10 +364,12 @@ function PanelContenido({ sesion }) {
   );
 }
 
-export default function Panel({ sesion }) {
+export default function Panel({ sesion, rol }) {
   return (
-    <CajaProvider>
-      <PanelContenido sesion={sesion} />
-    </CajaProvider>
+    <RolContext.Provider value={rol ?? "empleado"}>
+      <CajaProvider>
+        <PanelContenido sesion={sesion} rol={rol} />
+      </CajaProvider>
+    </RolContext.Provider>
   );
 }

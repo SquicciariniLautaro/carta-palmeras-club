@@ -11,8 +11,10 @@ Casi no hay backend propio: el navegador habla directo con Supabase usando la cl
 ## Estructura
 
 ```
-supabase/schema.sql        tablas, funciones RPC, RLS, bucket y políticas de Storage
+supabase/schema.sql        tablas, funciones RPC, RLS, bucket y políticas de Storage (base nueva)
+supabase/actualizacion-*   cambios para correr en una base que ya está andando (ver GUIA-SUPABASE.md)
 api/cloudinary.js          función de Vercel: firma subidas y borra fotos en Cloudinary
+pruebas/base/              npm run probar-base: el SQL en un Postgres de mentira (PGlite)
 vercel.json                reescritura SPA, cabeceras de seguridad y caché
 src/
   main.jsx                 BrowserRouter + Toaster
@@ -21,11 +23,11 @@ src/
   config.js                nombre, WhatsApp, Instagram y límites
   lib/                     supabase.js, formato.js, whatsapp.js, imagenes.js, opciones.js, opcionesForm.js,
                            impresion.js (ticketera), excel.js y reportes.js (planillas), mensajesCliente.js
-  hooks/                   useSesion.js, useCarrito.js, usePedidosEnVivo.js, useCaja.js
+  hooks/                   useSesion.js, useRol.js, useCarrito.js, usePedidosEnVivo.js, useCaja.js
   pages/                   Catalogo.jsx, Admin.jsx
   components/catalogo/     Navbar, Filtros, TarjetaProducto, DetalleProducto, Carrito,
                            CarritoProvider, ControlCantidad, Precio, BotonFlotante, Footer, Preloader
-  components/admin/        Login, Panel, Turno (venta noche / mediodía), VentasTurno, TableroPedidos,
+  components/admin/        Login, Panel, Turno (venta noche / mediodía), Cancha, Stock, Actividad, VentasTurno, TableroPedidos,
                            DetalleVenta, EditarVenta, VentaLocal, CobrarVenta, FormPagos, AvisoCliente,
                            MenuDia, ListaComidas, FormComida, OpcionesComida, SubirImagen, Categorias,
                            Horarios, Caja, CuentasCorrientes, Gastos, Finanzas, ConfigImpresora,
@@ -44,7 +46,7 @@ src/
 2. Andá a **SQL Editor → New query**, pegá todo `supabase/schema.sql` y tocá **Run**. **Si ya tenías la base de la versión anterior, volvé a correrlo entero**: agrega turnos, cobros, caja, gastos y cuentas corrientes sin perder datos (borra los pedidos cancelados). Crea las tablas, las funciones, las políticas RLS, el bucket `comidas` (solo para las fotos viejas) y el menú inicial (categorías y productos del menú impreso). Se puede volver a correr sin romper nada; en una base existente también migra a esta versión (saca el stock, pasa los estados de los pedidos y une las napolitanas).
 3. **Desactivá el registro público:** Authentication → Sign In / Providers → desactivá **"Allow new users to sign up"**. Así nadie más puede crearse una cuenta.
 4. **Creá el usuario del dueño:** Authentication → Users → **Add user → Create new user**, con correo y contraseña (marcá "Auto Confirm User").
-5. **Hacelo administrador:** en el SQL Editor corré (con su correo):
+5. **Hacelo administrador (dueño):** en el SQL Editor corré (con su correo). Para empleados, ver la guía:
 
    ```sql
    insert into public.admins (user_id)
@@ -77,6 +79,7 @@ CLOUDINARY_API_SECRET=xxxxxxxx
 npm install
 npm run dev       # http://localhost:5173  (panel en /admin)
 npm run build     # corre ESLint (0 advertencias) y genera dist/
+npm run probar-base  # prueba el SQL en un Postgres de mentira (PGlite): instalación, actualizaciones y reglas del negocio
 npm run preview   # sirve dist/ para probar el build
 ```
 
@@ -100,6 +103,12 @@ npm run preview   # sirve dist/ para probar el build
 
 **Cobros (cerrar cuenta):** una venta solo pasa a `cerrado` (cobrada) registrando cómo se pagó: efectivo (con cálculo de vuelto), transferencia, cuenta corriente o una combinación (`cobrar_venta`, tabla `pagos`). Efectivo y transferencia necesitan la caja abierta. Una venta cobrada no se edita: primero se anula el cobro (`anular_cobro`), salvo que ya esté en un arqueo cerrado. Las **ventas en caja** (`registrar_venta_local`) se cobran en el momento o quedan como cuenta abierta (mesa) en el tablero.
 
+**Cancha de fútbol:** pestaña *Cancha*. Grilla del día (08 a 24 h) y lista de turnos (`cancha_turnos`: día, hora, duración, a nombre de, precio). Un trigger no deja que dos turnos se pisen (también los que cruzan la medianoche). Al cobrar (`cobrar_turno_cancha`) se arma una venta del turno `cancha` con la línea "Alquiler de cancha" y se cobra con `_cobrar`: entra en la caja, en Finanzas, en los Excel y en las cuentas corrientes. `anular_cobro_cancha` borra esa venta y el turno vuelve a "falta cobrar". Un turno cobrado no cambia de precio ni se borra sin anular el cobro. Señas: `senar_turno_cancha` (el cobro final descuenta lo pagado) y `cerrar_turno_con_sena` si no vienen. Turnos fijos: `cancha_fijos`; `preparar_turnos_fijos(fecha)` los anota en el día que se mira (desde hoy) y borrar ese turno lo libera solo ese día (`cancha_fijos_libres`). El precio por hora (`ajustes.cancha_precio_hora`) lo fija el dueño y el empleado no puede cobrar otro.
+
+**Stock (solo kiosco):** las categorías con `controla_stock` (Bebidas y Golosinas) son las únicas con stock (`comidas.stock`, null = sin control). El trigger `venta_items_stock` lo descuenta con cada venta y lo devuelve al sacar productos, cancelar o borrar; cada movimiento queda en `stock_movimientos`. El stock no se escribe a mano: entra con `cargar_mercaderia` y se corrige con `ajustar_stock` (dueño). `stock_minimo` dispara el aviso de stock bajo. Un pedido web no puede llevar más de lo que hay (la carta además oculta las que están en 0); en el local se permite quedar en negativo y la venta en caja avisa. Si una venta es solo de kiosco, la comanda de cocina es opcional: en la venta en caja queda destildada y los pedidos web no la imprimen solos (salvo que se active en *Ticketera*).
+
+**Usuarios y permisos:** la tabla `admins` tiene un `rol`: `dueno` (todo) o `empleado` (Venta noche, Venta mediodía, Cancha, Caja y Cuentas corrientes, sin poder cambiar precios, anular cobros, borrar ventas cobradas ni arqueos, ajustar stock ni ver gastos). `mi_rol()` le dice al panel qué mostrar (`hooks/useRol.js`); lo que manda es la base: triggers que miran `current_user = 'authenticated'` (alguien desde el panel tocando una tabla) y `es_dueno()` (`_solo_dueno`, `_solo_estas_columnas`, `_proteger_venta`, `_precio_cancha`), y las funciones de anulación piden dueño. Todo lo importante queda en `actividad` (triggers `_actividad` y `_registrar`), que solo lee el dueño y nadie puede editar. Cómo dar de alta empleados: [GUIA-SUPABASE.md](GUIA-SUPABASE.md#usuarios-empleados-sin-gastos-ni-finanzas).
+
 **Caja:** cada apertura es un arqueo (`abrir_caja`, solo uno abierto). Muestra el efectivo que tiene que haber (inicial + ventas en efectivo + pagos de cuentas corrientes + ingresos − retiros − gastos pagados con la caja), lo vendido por forma de pago y por turno, y los movimientos. Se cierra con el conteo de billetes (`cerrar_caja`): queda guardado con una copia de los totales, la diferencia (faltante o sobrante) y se imprime. **Un arqueo cerrado no se puede editar** (lo bloquean triggers, también sus cobros, movimientos y gastos); si hubo un error se borra, y sus cobros se pueden sumar a la próxima caja.
 
 **Cuentas corrientes:** clientes con DNI/CUIT, teléfono y límite de crédito opcional. Estado de cuenta con debe, haber y saldo, y la comanda de cada consumo. Se registran pagos parciales o se **cierra la cuenta** cobrando el saldo completo (`cobrar_cuenta_corriente`). Vista `clientes_saldos`.
@@ -110,7 +119,7 @@ npm run preview   # sirve dist/ para probar el build
 
 **Excel para el contador:** cada sección descarga su planilla `.xlsx` (ventas, detalle de productos, arqueos, cuentas corrientes, estado de cuenta, gastos) y Finanzas arma el **reporte contable** completo en un solo archivo (resumen, ventas, productos, cobros, gastos, arqueos y cuentas corrientes), con importes en pesos, fechas reales, filtros y totales con fórmula. ExcelJS se descarga recién al exportar.
 
-**Ticketera:** botón *Ticketera* en el panel. Imprime la **comanda** para la cocina (grande, sin precios), el **ticket** del cliente (no fiscal) y el **resumen del arqueo**, en papel de 80 o 58 mm. Se puede imprimir la comanda sola al llegar cada pedido web y/o al confirmarlo. Si en la vista previa el ticket sale chiquito en una hoja A4, Windows no tiene instalada la ticketera (está imprimiendo en "Microsoft Print to PDF"): hay que instalar el driver de la marca (3nStar: 3nstar.com → Soporte → Drivers; por red, la IP sale en la hoja de autotest que imprime al prenderla con FEED apretado). Para que salga directo sin el cuadro de diálogo: destildar "Permitir que Windows administre mi impresora predeterminada", dejar la ticketera como predeterminada y abrir el panel con un acceso directo de Chrome con `--kiosk-printing` (con Chrome cerrado del todo). La ventana *Ticketera* tiene la guía paso a paso y un botón para copiar el acceso directo.
+**Ticketera:** botón *Ticketera* en el panel. Imprime la **comanda** para la cocina (grande, sin precios), el **ticket** del cliente (no fiscal) y el **resumen del arqueo**, en papel de 80 o 58 mm. Se puede imprimir la comanda sola al llegar cada pedido web y/o al confirmarlo; si llegan varios juntos salen en fila, una por una. Si en la vista previa el ticket sale chiquito en una hoja A4, Windows no tiene instalada la ticketera (está imprimiendo en "Microsoft Print to PDF"): hay que instalar el driver de la marca (3nStar: 3nstar.com → Soporte → Drivers; por red, la IP sale en la hoja de autotest que imprime al prenderla con FEED apretado). Ninguna página web puede imprimir sin el cuadro de diálogo de Chrome: para que salga directo hay que destildar "Permitir que Windows administre mi impresora predeterminada", dejar la ticketera como predeterminada y abrir el panel con el acceso directo "Panel Palmeras" (`--kiosk-printing --user-data-dir=C:\PanelPalmeras --app=…/admin`: un Chrome aparte, así anda aunque el Chrome de siempre esté abierto). La ventana *Ticketera* tiene la guía paso a paso, el botón para copiar el acceso directo y dice si la última impresión salió directo o con el cuadro; si sale con el cuadro, el panel muestra un aviso arriba.
 
 **Pedidos en vivo:** `usePedidosEnVivo` escucha la tabla `ventas` con Supabase Realtime (y revisa cada 30 s por las dudas). Con un pedido web nuevo suena un aviso (`lib/sonido.js`), aparece un aviso en el panel y, si la pestaña no está a la vista y se dieron permisos, una notificación del navegador.
 

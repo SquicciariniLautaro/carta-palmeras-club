@@ -9,11 +9,11 @@ import Modal from "../ui/Modal";
 import ControlCantidad from "../catalogo/ControlCantidad";
 import FormPagos from "./FormPagos";
 import { PAGO_INICIAL, pagoUsaCaja, pagosConMontos, validarPago } from "./pagosUtils";
-import { TURNOS, entradasDeComidas } from "./ventasUtils";
+import { TURNOS, entradasDeComidas, necesitaCocina, stockDe } from "./ventasUtils";
 
 const MAX_POR_LINEA = 50;
 
-function Contenido({ turno, comidas, menuHoy, onCerrar, onRegistrada }) {
+function Contenido({ turno, comidas, kiosco, menuHoy, onCerrar, onRegistrada }) {
   const { caja } = useCaja();
   const { clientes, recargar: recargarClientes } = useClientes();
   const [lineas, setLineas] = useState([]); // [{ valor, cantidad }]
@@ -22,7 +22,7 @@ function Contenido({ turno, comidas, menuHoy, onCerrar, onRegistrada }) {
   const [nota, setNota] = useState("");
   const [modo, setModo] = useState("cobrar"); // cobrar | abierta
   const [pago, setPago] = useState(PAGO_INICIAL);
-  const [conComanda, setConComanda] = useState(true);
+  const [comandaElegida, setComandaElegida] = useState(null); // null = según lo que se vende
   const [conTicket, setConTicket] = useState(() => leerConfigImpresora().ticketAlCobrar);
   const [guardando, setGuardando] = useState(false);
 
@@ -36,6 +36,23 @@ function Contenido({ turno, comidas, menuHoy, onCerrar, onRegistrada }) {
   }, [entradas, busqueda]);
 
   const total = lineas.reduce((acc, l) => acc + (entradaPorValor.get(l.valor)?.precio ?? 0) * l.cantidad, 0);
+
+  // Solo bebidas o golosinas: la comanda queda destildada (se puede tildar igual)
+  const paraCocina = necesitaCocina(
+    lineas.map((l) => ({ comida_id: entradaPorValor.get(l.valor)?.comida.id })),
+    kiosco
+  );
+  const conComanda = comandaElegida ?? (lineas.length === 0 || paraCocina);
+
+  // Unidades pedidas de cada comida (una bebida puede estar en varias líneas)
+  const pedidas = new Map();
+  for (const l of lineas) {
+    const id = entradaPorValor.get(l.valor)?.comida.id;
+    if (id) pedidas.set(id, (pedidas.get(id) ?? 0) + l.cantidad);
+  }
+  const sinStock = [...pedidas]
+    .map(([id, cantidad]) => ({ comida: comidas.find((c) => c.id === id), cantidad }))
+    .filter(({ comida, cantidad }) => comida && stockDe(comida, kiosco) != null && cantidad > stockDe(comida, kiosco));
 
   function sumar(valor, delta = 1) {
     setLineas((prev) => {
@@ -134,6 +151,11 @@ function Contenido({ turno, comidas, menuHoy, onCerrar, onRegistrada }) {
                   <span>
                     {e.nombre}
                     {!e.comida.activo && <span className="ml-1 text-xs text-tinta-suave">(no disponible)</span>}
+                    {stockDe(e.comida, kiosco) != null && (
+                      <span className={`ml-1 text-xs ${stockDe(e.comida, kiosco) > 0 ? "text-tinta-suave" : "font-semibold text-brasa"}`}>
+                        (stock: {stockDe(e.comida, kiosco)})
+                      </span>
+                    )}
                   </span>
                   <span className="cifras shrink-0 text-tinta-suave">{formatearPrecio(e.precio)}</span>
                 </button>
@@ -177,6 +199,13 @@ function Contenido({ turno, comidas, menuHoy, onCerrar, onRegistrada }) {
         </ul>
       )}
 
+      {sinStock.length > 0 && (
+        <p className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+          Según el sistema no alcanza el stock de {sinStock.map(({ comida }) => `${comida.nombre} (quedan ${stockDe(comida, kiosco)})`).join(", ")}.
+          La venta se registra igual y el stock queda en negativo: después corregilo en Comidas con lo que hay en la heladera.
+        </p>
+      )}
+
       <div className="grid gap-3 sm:grid-cols-2">
         <label>
           <span className="etiqueta">Cliente o mesa (opcional)</span>
@@ -216,8 +245,9 @@ function Contenido({ turno, comidas, menuHoy, onCerrar, onRegistrada }) {
 
       <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
         <label className="flex items-center gap-2">
-          <input type="checkbox" className="size-4 accent-palmera" checked={conComanda} onChange={(e) => setConComanda(e.target.checked)} />
+          <input type="checkbox" className="size-4 accent-palmera" checked={conComanda} onChange={(e) => setComandaElegida(e.target.checked)} />
           Imprimir comanda para la cocina
+          {lineas.length > 0 && !paraCocina && <span className="text-xs text-tinta-suave">(solo bebidas o golosinas: es opcional)</span>}
         </label>
         {modo === "cobrar" && (
           <label className="flex items-center gap-2">
@@ -244,7 +274,7 @@ function Contenido({ turno, comidas, menuHoy, onCerrar, onRegistrada }) {
 }
 
 // Venta en caja (mostrador o mesa) para el turno noche o mediodía
-export default function VentaLocal({ abierto, turno, comidas, menuHoy = [], onCerrar, onRegistrada }) {
+export default function VentaLocal({ abierto, turno, comidas, kiosco = new Set(), menuHoy = [], onCerrar, onRegistrada }) {
   const [vuelta, setVuelta] = useState(0);
   return (
     <Modal abierto={abierto} onCerrar={onCerrar} titulo={`Nueva venta en caja · ${TURNOS[turno].corto}`} ancho="max-w-2xl">
@@ -253,6 +283,7 @@ export default function VentaLocal({ abierto, turno, comidas, menuHoy = [], onCe
           key={vuelta}
           turno={turno}
           comidas={comidas}
+          kiosco={kiosco}
           menuHoy={menuHoy}
           onCerrar={onCerrar}
           onRegistrada={() => {

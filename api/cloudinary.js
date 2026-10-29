@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 // Función de Vercel: firma las subidas de fotos a Cloudinary y borra las
 // viejas. La clave secreta de Cloudinary vive solo acá (variables de entorno
 // de Vercel), nunca en el navegador. Solo atiende a administradores: el panel
-// manda el token de su sesión de Supabase y se verifica con es_admin().
+// manda el token de su sesión de Supabase y se verifica con es_dueno() (los
+// empleados no cambian productos).
 //
 // Variables: CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
 // (opcional CLOUDINARY_FOLDER) + las de Supabase que ya usa la página.
@@ -24,7 +25,7 @@ async function esAdmin(token) {
   const claveAnonima = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
   if (!url || !claveAnonima || !token) return false;
   try {
-    const respuesta = await fetch(`${url}/rest/v1/rpc/es_admin`, {
+    const respuesta = await fetch(`${url}/rest/v1/rpc/es_dueno`, {
       method: "POST",
       headers: { apikey: claveAnonima, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: "{}",

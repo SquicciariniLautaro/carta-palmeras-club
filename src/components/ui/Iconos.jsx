@@ -245,3 +245,10 @@ export const IconoMenuDia = (p) => (
     <path d="M3 13h18M5 13a7 7 0 0 1 14 0M12 6V4M2 17h20" />
   </Svg>
 );
+export const IconoPelota = (p) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7.5l4.3 3.1-1.6 5H9.3l-1.6-5L12 7.5z" />
+    <path d="M12 3v4.5M20.6 9.4l-4.3 1.2M17.3 19.3l-2.6-3.7M6.7 19.3l2.6-3.7M3.4 9.4l4.3 1.2" />
+  </Svg>
+);

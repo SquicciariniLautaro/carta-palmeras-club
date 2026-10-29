@@ -152,12 +152,64 @@ Cada comida puede tener opciones para que el cliente arme su pedido. Se cargan d
 El cliente además puede escribir una aclaración (por ejemplo "bien cocida"). Todo llega en el mensaje de WhatsApp y se ve en el detalle de cada venta del panel.
 
 **Si ya habías corrido `supabase/schema.sql` antes de esta versión**, volvé a correrlo completo en el SQL Editor. Se puede correr las veces que haga falta, y en una base que ya está andando:
-- saca el stock (la columna y las funciones que lo descontaban),
 - pasa las ventas "confirmadas" a **Cerrado** y las "canceladas" a **Cancelado**,
 - une las tres napolitanas en una sola **Napolitana** con opción para 1, 2 o 3 personas (conserva sus precios y la foto),
 - agrega la función para editar pedidos desde el panel,
 - crea la tabla **horarios** (arranca con todos los días "todo el día") y hace que la base rechace pedidos fuera de horario,
 - activa el **tiempo real** de la tabla `ventas`, para que el panel se entere solo de los pedidos nuevos.
+
+## Actualización del 29/10/2026: cancha y stock de kiosco
+
+En la base que ya está andando **no hace falta volver a correr todo `schema.sql`**: corré solo `supabase/actualizacion-2026-10-29-cancha-y-stock.sql` (SQL Editor → New query → pegar todo → Run). Agrega, sin tocar lo que ya hay:
+
+- la tabla de **turnos de la cancha** y las funciones para cobrarlos (lo cobrado entra en la caja y en Finanzas como "Cancha"),
+- el **stock** solo para las categorías de kiosco: marca solas Bebidas y Golosinas (crea Golosinas en la carta, que no se ve hasta tener productos),
+- que cada venta descuente el stock de esas comidas (y lo devuelva si se cancela o se borra), y que la carta oculte las que llegan a 0.
+
+Al final muestra las categorías con stock y la cantidad de turnos de cancha (0). Hay que correrlo **antes** de publicar el código nuevo: mientras no se corra, la sección Cancha dice que no pudo cargar los turnos.
+
+## Usuarios empleados (sin Gastos ni Finanzas)
+
+El panel tiene dos tipos de usuario. El empleado hace lo del turno; lo que toca precios, plata ya cobrada o los números del negocio es solo del dueño:
+
+| El empleado **sí** puede | Solo el **dueño** |
+|---|---|
+| Tomar y avanzar pedidos, cancelar los que no se cobraron | Borrar una venta cobrada o anular un cobro (también de la cancha) |
+| Vender en caja y cobrar (efectivo, transferencia, cuenta corriente) | Cambiar precios, productos, categorías, horarios y el menú del día |
+| Abrir y cerrar la caja, cargar ingresos y retiros | Borrar un arqueo o un ingreso/retiro, cambiar el efectivo inicial |
+| Reservar, señar y cobrar turnos de la cancha; anotar y liberar turnos fijos | Fijar el precio por hora de la cancha (el empleado cobra ese) y cerrar un turno "no vino" con la seña |
+| Cargar la mercadería que entra y marcar si hay o no hay un producto | Ajustar el stock (corregir el conteo) |
+| Crear cuentas corrientes y cobrarlas | Cambiar el límite de crédito o dar de baja una cuenta |
+| | Gastos y costos, Finanzas y el registro de **Actividad** |
+
+No es solo que no ve los botones: la base rechaza esas acciones aunque alguien las intente por otro lado. En la Caja el empleado ve los gastos que se pagaron con la plata de la caja (para que el arqueo cierre), pero no los demás.
+
+**Registro de actividad** (pestaña *Actividad*, solo el dueño): quién hizo cada cosa y cuándo (pedidos, cobros, señas, anulaciones, caja, retiros, cambios de precios, mercadería, ajustes de stock, turnos), con filtro por usuario y para ver solo anulaciones, borrados y retiros. Nadie lo puede editar ni borrar. En la caja y en cada venta también se ve qué usuario cobró.
+
+**Una sola vez:** corré `supabase/actualizacion-2026-10-29-empleados.sql` (SQL Editor → New query → pegar todo → Run). Los usuarios que ya entraban quedan como dueño, y la consulta del final lo muestra.
+
+**Para cada empleado:**
+1. **Authentication → Users → Add user → Create new user**: correo y contraseña, con **Auto Confirm User** tildado. El correo no tiene que existir de verdad (por ejemplo `caja1@laspalmeras.club`); es el usuario con el que entra.
+2. En el SQL Editor, con sus correos:
+
+   ```sql
+   insert into public.admins (user_id, rol)
+   select id, 'empleado' from auth.users
+    where email in ('caja1@laspalmeras.club', 'caja2@laspalmeras.club')
+   on conflict (user_id) do update set rol = excluded.rol;
+   ```
+
+Para **sacarle el acceso** a alguien: `delete from public.admins where user_id = (select id from auth.users where email = 'caja1@laspalmeras.club');` (o borrá el usuario en Authentication → Users). Para pasar un empleado a dueño, el mismo insert de arriba con `'dueno'`.
+
+## Actualización del 29/10/2026 (3): permisos, actividad, stock y cancha
+
+Corré `supabase/actualizacion-2026-10-29-permisos-stock-cancha.sql` (SQL Editor → New query → pegar todo → Run), **después** de las dos anteriores del 29/10. Agrega, sin borrar datos:
+
+- los permisos del empleado y el **registro de actividad** (tabla de arriba),
+- el **historial de stock**, la carga de mercadería y el aviso de stock bajo (cada producto tiene "avisar cuando queden…", por defecto 5),
+- las **señas** y los **turnos fijos** de la cancha, y el precio por hora que fija el dueño.
+
+Al final muestra 5 tablas con su cantidad de filas (todas en 0 la primera vez). **Después de correrlo, el dueño tiene que fijar el precio de la cancha** (pestaña Cancha → "Cambiar", arriba): mientras no lo haga, los empleados pueden poner cualquier precio.
 
 ## Si algo no anda
 
@@ -176,7 +228,8 @@ El cliente además puede escribir una aclaración (por ejemplo "bien cocida"). T
 - **Pedidos en vivo:** con el panel abierto, los pedidos se actualizan solos. Cuando entra uno nuevo suena un aviso, aparece un cartel con botón **Ver** y la pestaña **Ventas** muestra cuántos quedan sin cerrar (late en rojo si hay pendientes). El navegador solo deja sonar después de tocar algo en el panel: con el primer toque ya queda listo. El botón **🔔 Activar avisos** del encabezado permite que llegue una notificación aunque el panel esté en otra pestaña.
   Si los pedidos nuevos tardan hasta 30 segundos en aparecer, el tiempo real no está activo: en Supabase andá a **Database → Publications → supabase_realtime** y activá la tabla `ventas` (el SQL ya lo intenta hacer solo).
 - **Horario de atención:** se carga en el panel, pestaña **Horarios**. Fuera de horario la carta muestra "Ahora estamos cerrados · Abrimos hoy a las 20:00 hs" y no deja mandar el pedido (la base también lo rechaza). Si cierran después de medianoche, poné por ejemplo 20:00 a 01:00. Misma hora en los dos campos = todo el día.
-- **No hay stock:** si un día no hay algo, desactivá la comida (interruptor **Activo** en Comidas) y no aparece en la carta.
+- **Stock:** solo lo llevan las categorías marcadas como **Kiosco** (Bebidas y Golosinas; se marca en Categorías). Se maneja en la pestaña **Stock** de cada turno: "Cargar mercadería" suma lo que entra (empleado o dueño) y "Ajustar" corrige con lo que se contó (solo el dueño). Cada venta lo descuenta sola y todo queda en el historial, con quién lo hizo. Arriba del panel aparece un aviso cuando algo llega al mínimo. Con stock 0 la comida deja de verse en la carta; en el local se puede vender igual (queda en negativo para que se vea la diferencia). Las comidas de cocina no llevan stock: si un día no hay algo, desactivala (interruptor **Activo**).
+- **Cancha:** pestaña **Cancha** del panel. Se reservan turnos por hora (no deja pisar dos turnos) y se cobran como cualquier venta: efectivo, transferencia o cuenta corriente, con la caja abierta. Si dejan **seña** se registra con "Señar" (entra en la caja) y al cobrar se cobra solo lo que falta; si no vienen, el dueño lo cierra con "No vino" y queda la seña. Los **turnos fijos** ("Turnos fijos") se anotan solos cada semana; si un día no vienen, "Liberar día".
 - **Fotos:** se suben desde el panel (Comidas → Editar). Se achican solas a 1200 px, se guardan en Cloudinary en WebP y en la carta se ven centradas en la comida.
 - **Seguridad:** la clave que usa la página es pública a propósito. Lo que protege los datos son las reglas (RLS) del archivo SQL: cualquiera puede ver el menú y mandar un pedido, pero solo el administrador puede cambiar productos o ver las ventas.
 - **Copias de seguridad:** el plan gratuito de Supabase pausa los proyectos sin uso durante una semana. Si pasa, entrá al panel de Supabase y tocá **Restore project**.

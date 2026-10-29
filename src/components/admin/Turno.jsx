@@ -7,28 +7,34 @@ import Categorias from "./Categorias";
 import Horarios from "./Horarios";
 import MenuDia from "./MenuDia";
 import VentasTurno from "./VentasTurno";
+import Stock from "./Stock";
+import { useRol } from "../../hooks/useRol";
 import { TURNOS } from "./ventasUtils";
 
+// soloDueno: el empleado no la ve (la base tampoco lo deja cambiar)
 const SUBSECCIONES = {
   noche: [
     { id: "ventas", nombre: "Pedidos y ventas" },
     { id: "comidas", nombre: "Comidas de la carta" },
-    { id: "categorias", nombre: "Categorías" },
-    { id: "horarios", nombre: "Horarios" },
+    { id: "stock", nombre: "Stock" },
+    { id: "categorias", nombre: "Categorías", soloDueno: true },
+    { id: "horarios", nombre: "Horarios", soloDueno: true },
   ],
   mediodia: [
     { id: "ventas", nombre: "Ventas" },
-    { id: "menu", nombre: "Menú del día" },
+    { id: "menu", nombre: "Menú del día", soloDueno: true },
     { id: "comidas", nombre: "Platos" },
-    { id: "categorias", nombre: "Categorías" },
-    { id: "horarios", nombre: "Horarios" },
+    { id: "stock", nombre: "Stock" },
+    { id: "categorias", nombre: "Categorías", soloDueno: true },
+    { id: "horarios", nombre: "Horarios", soloDueno: true },
   ],
 };
 
 // Una de las dos ventas del negocio (noche o mediodía), con sus propias
 // ventas, comidas, categorías y horarios.
-export default function Turno({ turno, datos, cargando, enCurso, actualizacion, onRecargarDatos, onCambioVentas }) {
-  const [sub, setSub] = useState("ventas");
+export default function Turno({ turno, datos, cargando, enCurso, actualizacion, subInicial = "ventas", onRecargarDatos, onCambioVentas }) {
+  const { esDueno } = useRol();
+  const [sub, setSub] = useState(subInicial);
   const [menuHoy, setMenuHoy] = useState([]);
   const [vueltaMenu, setVueltaMenu] = useState(0);
   const noche = turno === "noche";
@@ -78,7 +84,7 @@ export default function Turno({ turno, datos, cargando, enCurso, actualizacion, 
       </div>
 
       <nav className="sin-scrollbar flex gap-1 overflow-x-auto rounded-xl bg-borde/50 p-1" aria-label={`Secciones de ${TURNOS[turno].nombre}`}>
-        {SUBSECCIONES[turno].map((s) => (
+        {SUBSECCIONES[turno].filter((s) => esDueno || !s.soloDueno).map((s) => (
           <button
             key={s.id}
             type="button"
@@ -93,7 +99,9 @@ export default function Turno({ turno, datos, cargando, enCurso, actualizacion, 
         ))}
       </nav>
 
-      {sub === "comidas" ? (
+      {sub === "stock" ? (
+        <Stock turno={turno} comidas={comidas} categorias={categorias} cargando={cargando} actualizacion={actualizacion} onCambio={onRecargarDatos} />
+      ) : sub === "comidas" ? (
         <ListaComidas turno={turno} comidas={comidas} categorias={categorias} cargando={cargando} onCambio={onRecargarDatos} />
       ) : sub === "categorias" ? (
         <Categorias turno={turno} categorias={categorias} comidas={comidas} onCambio={onRecargarDatos} />
@@ -102,7 +110,14 @@ export default function Turno({ turno, datos, cargando, enCurso, actualizacion, 
       ) : sub === "menu" ? (
         <MenuDia comidas={comidas} onCambio={() => setVueltaMenu((n) => n + 1)} />
       ) : (
-        <VentasTurno turno={turno} comidas={comidas} menuHoy={menuHoy} actualizacion={actualizacion} onCambio={onCambioVentas} />
+        <VentasTurno
+          turno={turno}
+          comidas={comidas}
+          categorias={categorias}
+          menuHoy={menuHoy}
+          actualizacion={actualizacion}
+          onCambio={onCambioVentas}
+        />
       )}
     </div>
   );

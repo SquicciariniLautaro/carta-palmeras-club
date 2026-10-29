@@ -57,7 +57,8 @@ function calcular(d) {
   const suma = (lista, f = (x) => x.monto) => lista.reduce((acc, x) => acc + Number(f(x) || 0), 0);
   const ventas = suma(d.ventas, (v) => v.total);
   const ventasNoche = suma(d.ventas.filter((v) => v.turno === "noche"), (v) => v.total);
-  const ventasMediodia = ventas - ventasNoche;
+  const ventasCancha = suma(d.ventas.filter((v) => v.turno === "cancha"), (v) => v.total);
+  const ventasMediodia = ventas - ventasNoche - ventasCancha;
   const ingresos = d.pagos.filter((p) => p.metodo !== "cuenta_corriente");
   const cobradoEfectivo = suma(ingresos.filter((p) => p.metodo === "efectivo"));
   const cobradoTransferencia = suma(ingresos.filter((p) => p.metodo === "transferencia"));
@@ -77,6 +78,7 @@ function calcular(d) {
     ventas,
     ventasNoche,
     ventasMediodia,
+    ventasCancha,
     cantidadVentas: d.ventas.length,
     cobrado,
     cobradoEfectivo,
@@ -165,6 +167,7 @@ function hojaResumen(r, periodo) {
       { concepto: "Ventas cobradas del período", valor: r.ventas, detalle: `${r.cantidadVentas} ventas cerradas (incluye lo vendido a cuenta corriente)` },
       { concepto: "   Venta noche", valor: r.ventasNoche },
       { concepto: "   Venta mediodía", valor: r.ventasMediodia },
+      { concepto: "   Cancha (alquileres)", valor: r.ventasCancha },
       { concepto: "Gastos del período", valor: r.gastos, detalle: "Pagados y pendientes, por fecha del gasto" },
       { concepto: "   Costos fijos", valor: r.gastosFijos },
       { concepto: "   Costos variables", valor: r.gastosVariables },
@@ -308,7 +311,8 @@ export default function Finanzas() {
               valor={formatearPesos(r.ventas)}
               detalle={
                 <>
-                  Noche {formatearPesos(r.ventasNoche)} · Mediodía {formatearPesos(r.ventasMediodia)}
+                  Noche {formatearPesos(r.ventasNoche)} · Mediodía {formatearPesos(r.ventasMediodia)} · Cancha{" "}
+                  {formatearPesos(r.ventasCancha)}
                 </>
               }
             />

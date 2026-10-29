@@ -17,6 +17,7 @@ function valoresIniciales(comida, categorias) {
     precio_promo: comida?.precio_promo != null ? String(Number(comida.precio_promo)) : "",
     destacado: comida?.destacado ?? false,
     activo: comida?.activo ?? true,
+    stock_minimo: String(comida?.stock_minimo ?? 5),
     opciones: opcionesIniciales(comida),
   };
 }
@@ -26,7 +27,7 @@ function ErrorCampo({ mensaje }) {
 }
 
 // Mismas reglas que las restricciones de la base
-function validar(v) {
+function validar(v, conStock) {
   const errores = {};
   const nombre = v.nombre.trim();
   if (!nombre) errores.nombre = "Poné un nombre.";
@@ -47,6 +48,11 @@ function validar(v) {
     else if (!errores.precio && promo >= precio) errores.precio_promo = "Tiene que ser menor que el precio normal.";
   }
 
+  if (conStock) {
+    const minimo = Number(v.stock_minimo);
+    if (v.stock_minimo === "" || !Number.isInteger(minimo) || minimo < 0 || minimo > 100_000) errores.stock_minimo = "Poné una cantidad entera (0 o más).";
+  }
+
   const { errores: erroresOpciones } = validarOpciones(v.opciones, v.descripcion);
   if (Object.keys(erroresOpciones).length > 0) errores.opciones = erroresOpciones;
   return errores;
@@ -59,6 +65,8 @@ export default function FormComida({ comida, categorias, turno = "noche", onCerr
   const [archivo, setArchivo] = useState(null); // imagen nueva elegida
   const [quitarImagen, setQuitarImagen] = useState(false);
   const [guardando, setGuardando] = useState(false);
+  // Solo las categorías de kiosco (bebidas, golosinas) llevan stock
+  const conStock = Boolean(categorias.find((c) => c.id === v.categoria_id)?.controla_stock);
 
   const cambiar = (campo) => (e) => {
     const valor = e.target.type === "checkbox" ? e.target.checked : e.target.value;
@@ -67,7 +75,7 @@ export default function FormComida({ comida, categorias, turno = "noche", onCerr
 
   async function guardar(e) {
     e.preventDefault();
-    const encontrados = validar(v);
+    const encontrados = validar(v, conStock);
     setErrores(encontrados);
     if (Object.keys(encontrados).length > 0) {
       toast.error("Revisá los campos marcados.");
@@ -100,6 +108,7 @@ export default function FormComida({ comida, categorias, turno = "noche", onCerr
         destacado: v.destacado,
         activo: v.activo,
       };
+      if (conStock) fila.stock_minimo = Number(v.stock_minimo);
       if (nuevaImagen) {
         fila.imagen_url = nuevaImagen.url;
         fila.imagen_path = nuevaImagen.path;
@@ -209,6 +218,30 @@ export default function FormComida({ comida, categorias, turno = "noche", onCerr
             <ErrorCampo mensaje={errores.precio_promo} />
           </div>
         </div>
+
+        {conStock && (
+          <div className="rounded-xl border border-borde bg-fondo p-3">
+            <label htmlFor="f-minimo" className="etiqueta">
+              Avisar que queda poco cuando haya
+            </label>
+            <input
+              id="f-minimo"
+              type="number"
+              inputMode="numeric"
+              min="0"
+              step="1"
+              className="campo sm:w-48"
+              value={v.stock_minimo}
+              onChange={cambiar("stock_minimo")}
+            />
+            <p className="mt-1 text-xs text-tinta-suave">
+              Stock actual: <strong>{comida?.stock ?? "sin cargar"}</strong>. El stock no se escribe acá: se suma con "Cargar mercadería" y se
+              corrige con "Ajustar", en la pestaña Stock, así queda todo en el historial.
+              {conCarta && " Con stock 0 deja de verse en la carta online."}
+            </p>
+            <ErrorCampo mensaje={errores.stock_minimo} />
+          </div>
+        )}
 
         <OpcionesComida
           valor={v.opciones}
