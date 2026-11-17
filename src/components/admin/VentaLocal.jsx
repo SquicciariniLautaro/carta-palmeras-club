@@ -202,7 +202,7 @@ function Contenido({ turno, comidas, kiosco, menuHoy, onCerrar, onRegistrada }) 
       {sinStock.length > 0 && (
         <p className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
           Según el sistema no alcanza el stock de {sinStock.map(({ comida }) => `${comida.nombre} (quedan ${stockDe(comida, kiosco)})`).join(", ")}.
-          La venta se registra igual y el stock queda en negativo: después corregilo en Comidas con lo que hay en la heladera.
+          La venta se registra igual y el stock queda en negativo: avisale al dueño para que lo corrija en Stock → Ajustar con lo que hay en la heladera.
         </p>
       )}
 

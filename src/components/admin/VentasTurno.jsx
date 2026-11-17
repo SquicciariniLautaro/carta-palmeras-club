@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { supabase, mensajeDeError } from "../../lib/supabase";
-import { fechaInput, formatearFechaHora, formatearPesos, formatearPrecio } from "../../lib/formato";
+import { cantidad, fechaInput, formatearFechaHora, formatearPesos, formatearPrecio } from "../../lib/formato";
 import { descargarExcel } from "../../lib/excel";
 import { hojaProductos, hojaVentas } from "../../lib/reportes";
 import { imprimirComanda, imprimirTicket, leerConfigImpresora } from "../../lib/impresion";
@@ -15,6 +15,7 @@ import CobrarVenta from "./CobrarVenta";
 import AvisoCliente from "./AvisoCliente";
 import TableroPedidos from "./TableroPedidos";
 import { InsigniaEstado } from "./EstadoPedido";
+import { useRol } from "../../hooks/useRol";
 import { GraficoFacturacion, RankingComidas } from "./GraficoVentas";
 import {
   ESTADOS_ABIERTOS,
@@ -83,6 +84,7 @@ const FILTROS_ESTADO = [
 // actualizacion: cambia cuando el panel se entera de pedidos nuevos o modificados (tiempo real)
 // onCambio: avisa al panel que hubo un cambio acá (para los contadores)
 export default function VentasTurno({ turno, comidas, categorias = [], menuHoy, actualizacion = 0, onCambio }) {
+  const { esDueno } = useRol();
   const [rango, setRango] = useState("hoy");
   const [desdeTexto, setDesdeTexto] = useState(() => fechaInput(Date.now() - 6 * 864e5));
   const [hastaTexto, setHastaTexto] = useState(hoyInput);
@@ -255,7 +257,7 @@ export default function VentasTurno({ turno, comidas, categorias = [], menuHoy, 
     try {
       const subtitulo = `${TURNOS[turno].nombre} · ${textoPeriodo(periodo)}`;
       await descargarExcel(`ventas-${turno}_${sufijoArchivo(periodo)}`, [hojaVentas(filtradas, subtitulo), hojaProductos(filtradas, subtitulo)]);
-      toast.success(`Exportaste ${filtradas.length} ventas a Excel`);
+      toast.success(`Exportaste ${cantidad(filtradas.length, "venta", "ventas")} a Excel`);
     } catch (error) {
       console.error(error);
       toast.error("No se pudo generar el Excel.");
@@ -434,16 +436,19 @@ export default function VentasTurno({ turno, comidas, categorias = [], menuHoy, 
                           >
                             <IconoOjo className="size-4" />
                           </button>
-                          <button
-                            type="button"
-                            className="boton-secundario px-2.5 py-1.5 text-xs hover:text-rojo"
-                            onClick={() => setACancelar(v)}
-                            aria-label={`Borrar la venta #${v.numero}`}
-                            title="Borrar"
-                            disabled={procesando}
-                          >
-                            <IconoBasura className="size-4" />
-                          </button>
+                          {/* Una venta cobrada la borra solo el dueño (la base tampoco deja al empleado) */}
+                          {(v.estado !== "cerrado" || esDueno) && (
+                            <button
+                              type="button"
+                              className="boton-secundario px-2.5 py-1.5 text-xs hover:text-rojo"
+                              onClick={() => setACancelar(v)}
+                              aria-label={`Borrar la venta #${v.numero}`}
+                              title="Borrar"
+                              disabled={procesando}
+                            >
+                              <IconoBasura className="size-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

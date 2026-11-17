@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { supabase, mensajeDeError } from "../../lib/supabase";
-import { formatearFechaHora, formatearPesos } from "../../lib/formato";
+import { cantidad, formatearFechaHora, formatearPesos } from "../../lib/formato";
 import { descargarExcel } from "../../lib/excel";
 import { hojaArqueos } from "../../lib/reportes";
 import { imprimirArqueo } from "../../lib/impresion";
@@ -51,7 +51,7 @@ function DesgloseArqueo({ r }) {
         <Fila texto="En efectivo" valor={r.ventas_efectivo} />
         <Fila texto="Por transferencia" valor={r.ventas_transferencia} />
         <Fila texto="A cuenta corriente (fiado)" valor={r.ventas_cuenta_corriente} />
-        <Fila texto={`Total vendido · ${r.cantidad_ventas ?? 0} ventas`} valor={r.total_vendido} fuerte />
+        <Fila texto={`Total vendido · ${cantidad(r.cantidad_ventas, "venta", "ventas")}`} valor={r.total_vendido} fuerte />
         <Fila texto="Venta noche" valor={r.vendido_noche} claro />
         <Fila texto="Venta mediodía" valor={r.vendido_mediodia} claro />
         {Number(r.vendido_cancha) > 0 && <Fila texto="Cancha" valor={r.vendido_cancha} claro />}
@@ -285,7 +285,7 @@ function CajaAbierta({ caja, actualizacion, onCambio }) {
         <div className="tarjeta p-4">
           <p className="text-xs text-tinta-suave">Total vendido</p>
           <p className="cifras mt-1 text-xl font-bold">{formatearPesos(r.total_vendido)}</p>
-          <p className="text-xs text-tinta-suave">{r.cantidad_ventas} ventas</p>
+          <p className="text-xs text-tinta-suave">{cantidad(r.cantidad_ventas, "venta", "ventas")}</p>
         </div>
         <div className="tarjeta p-4">
           <p className="text-xs text-tinta-suave">Transferencias recibidas</p>
@@ -427,7 +427,7 @@ function CajaAbierta({ caja, actualizacion, onCambio }) {
           {datos.pendientes > 0 && (
             <p className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-950">
               <IconoAlerta className="mt-0.5 size-4 shrink-0" />
-              Hay {datos.pendientes} pedidos sin cobrar. Si los cobrás después del cierre, van a quedar en el próximo arqueo.
+              {datos.pendientes === 1 ? "Hay 1 pedido sin cobrar" : `Hay ${datos.pendientes} pedidos sin cobrar`}. Si los cobrás después del cierre, van a quedar en el próximo arqueo.
             </p>
           )}
           <div className="grid gap-2 sm:grid-cols-2">

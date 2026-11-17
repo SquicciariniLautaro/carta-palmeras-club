@@ -264,7 +264,7 @@ export default function FormComida({ comida, categorias, turno = "noche", onCerr
           </label>
         </div>
 
-        {conCarta && <SubirImagen
+        {conCarta && IMAGENES.mostrarEnPanel && <SubirImagen
           urlActual={quitarImagen ? null : comida?.imagen_url}
           archivo={archivo}
           onArchivo={(f) => {
