@@ -3,6 +3,8 @@ import toast from "react-hot-toast";
 import { EVENTO_MODO, guardarConfigImpresora, imprimirComanda, leerConfigImpresora, leerModoImpresion } from "../../lib/impresion";
 import { IconoImpresora } from "../ui/Iconos";
 import Modal from "../ui/Modal";
+import { NOMBRE_INSTALADOR, descargarInstalador } from "../../lib/instalador";
+import cuerpoInstalador from "../../lib/instalador-panel.ps1?raw";
 
 const PRUEBA = {
   numero: 0,
@@ -42,9 +44,50 @@ function Paso({ titulo, children }) {
 // --user-data-dir abre un Chrome aparte: el permiso funciona aunque el Chrome
 // de siempre (YouTube, WhatsApp…) ya esté abierto. --app lo abre en su propia
 // ventana, así el panel no queda como una pestaña escondida detrás de otra.
+const urlPanel = () => new URL("admin", window.location.origin + import.meta.env.BASE_URL).href;
+
+// Lo más fácil: un archivo que se abre con doble clic en la computadora del local y deja
+// todo listo (ticketera predeterminada, corte del papel y acceso directo). Ver lib/instalador.js
+function Instalador() {
+  function descargar() {
+    try {
+      descargarInstalador(cuerpoInstalador, urlPanel());
+      toast.success("Instalador descargado: abrilo con doble clic desde Descargas");
+    } catch {
+      toast.error("No se pudo armar el instalador.");
+    }
+  }
+
+  return (
+    <div className="space-y-2 rounded-xl border-2 border-palmera/40 bg-palmera/5 p-3 text-sm">
+      <p className="font-semibold">Dejarla lista en un minuto (recomendado)</p>
+      <p className="text-xs text-tinta-suave">
+        Hacelo en la computadora del local, con la ticketera prendida y conectada. El instalador la deja como impresora predeterminada,
+        activa el corte del papel y crea en el escritorio el acceso directo <strong>Panel Palmeras</strong>: una ventana de Chrome solo
+        para el panel, que imprime la comanda sin preguntar.
+      </p>
+      <ol className="list-decimal space-y-1 pl-4 text-xs text-tinta-suave">
+        <li>
+          Tocá <strong>Descargar instalador</strong>. Si Chrome avisa que el archivo puede ser peligroso, elegí <strong>Conservar</strong>.
+        </li>
+        <li>
+          Abrí <strong>{NOMBRE_INSTALADOR}</strong> con doble clic. Si Windows dice "Windows protegió su PC", tocá{" "}
+          <strong>Más información</strong> → <strong>Ejecutar de todas formas</strong>.
+        </li>
+        <li>Escribí el número de la ticketera de la lista y respondé las preguntas. Al final se abre el panel solo.</li>
+        <li>
+          Entrá con tu usuario y tocá <strong>Ticketera</strong> → <strong>Imprimir prueba</strong>: tiene que salir sola y cortada.
+        </li>
+      </ol>
+      <button type="button" className="boton-primario w-full text-sm" onClick={descargar}>
+        Descargar instalador
+      </button>
+    </div>
+  );
+}
+
 function AccesoDirecto() {
-  const panel = new URL("admin", window.location.origin + import.meta.env.BASE_URL).href;
-  const comando = `"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --kiosk-printing --user-data-dir="C:\\PanelPalmeras" --app=${panel}`;
+  const comando = `"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --kiosk-printing --autoplay-policy=no-user-gesture-required --user-data-dir="C:\\PanelPalmeras" --app=${urlPanel()}`;
 
   async function copiar() {
     try {
@@ -85,7 +128,7 @@ function EstadoImpresion() {
     return (
       <p className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
         <strong>Todavía pide confirmación.</strong> Chrome mostró el cuadro de impresión: así la comanda no sale sola cuando llega un
-        pedido. Seguí el paso 3 de abajo (el acceso directo) y volvé a imprimir la prueba.
+        pedido. Usá el instalador de abajo (o el paso 3) y volvé a imprimir la prueba desde el acceso directo.
       </p>
     );
   }
@@ -154,7 +197,10 @@ function Contenido({ onCerrar }) {
         />
       </div>
 
+      <Instalador />
+
       <div className="space-y-2 text-xs text-tinta-suave">
+        <p className="font-semibold text-tinta">O hacelo a mano, paso por paso:</p>
         <p>
           Si en la vista previa el ticket aparece chiquito en una hoja A4, la impresora elegida no es la ticketera (por ejemplo "Microsoft
           Print to PDF"): Windows todavía no la tiene instalada.
@@ -206,6 +252,30 @@ function Contenido({ onCerrar }) {
           <li>
             Si Windows dice que no encuentra el archivo, Chrome está en otra carpeta: click derecho en el ícono de Chrome → Propiedades, y
             usá esa ruta en lugar de la primera parte.
+          </li>
+        </Paso>
+        <Paso titulo="4. Que corte el papel solo después de cada comanda">
+          <li>
+            El programa de comandas que usaban antes le manda la orden de corte directo a la ticketera. Desde el navegador eso lo hace el
+            driver de Windows: hay que activarlo una sola vez y queda para siempre.
+          </li>
+          <li>
+            Inicio → escribí <strong>Impresoras</strong> → Impresoras y escáneres → tocá la ticketera →{" "}
+            <strong>Preferencias de impresión</strong>.
+          </li>
+          <li>
+            Buscá la opción de corte (según el driver se llama <em>Corte de papel</em>, <em>Paper Cut</em>, <em>Cutter</em> o{" "}
+            <em>Cut Mode</em>; a veces está adentro del botón <strong>Opciones avanzadas</strong> o en la pestaña{" "}
+            <em>Características / Device Settings</em>).
+          </li>
+          <li>
+            Elegí <strong>Corte al final del documento</strong> (<em>Cut at end of document / End of job</em>) y, si lo pregunta,{" "}
+            <strong>Corte parcial</strong> (deja una pestañita y el papel no se cae). No elijas "Sin corte" ni "Corte por página".
+          </li>
+          <li>Tocá Aplicar → Aceptar y volvé a tocar Imprimir prueba: la comanda tiene que salir cortada.</li>
+          <li>
+            Si en las Preferencias no aparece ninguna opción de corte, Windows está usando un driver genérico (por ejemplo "Generic / Text
+            Only"): instalá el driver de la marca del paso 1 y elegí ese.
           </li>
         </Paso>
       </div>

@@ -24,4 +24,8 @@ export const IMAGENES = {
   tamanoMaximo: 2 * 1024 * 1024, // 2 MB
   tipos: ["image/jpeg", "image/png", "image/webp"],
   ladoMaximo: 1200, // px
+  // false: el panel no muestra el campo de foto ni las miniaturas, porque la
+  // carta todavía no muestra fotos. El dueño está sacándoles fotos a los
+  // productos: cuando las tenga, poner true (Cloudinary y la subida siguen listos).
+  mostrarEnPanel: false,
 };

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { supabase, mensajeDeError } from "../../lib/supabase";
 import { borrarImagen, urlImagen } from "../../lib/imagenes";
+import { IMAGENES } from "../../config";
 import { formatearPrecio, normalizarTexto } from "../../lib/formato";
 import { IconoBasura, IconoBuscar, IconoEditar, IconoEstrella, IconoMas } from "../ui/Iconos";
 import Cargando from "../ui/Cargando";
@@ -31,6 +32,7 @@ function Interruptor({ activo, onCambiar, etiqueta, bloqueado = false, motivo })
 
 export default function ListaComidas({ turno = "noche", comidas, categorias, cargando, onCambio }) {
   const conCarta = turno === "noche";
+  const conFotos = conCarta && IMAGENES.mostrarEnPanel; // ver config.js
   const { esDueno } = useRol();
   const [busqueda, setBusqueda] = useState("");
   const [categoriaFiltro, setCategoriaFiltro] = useState("");
@@ -166,12 +168,14 @@ export default function ListaComidas({ turno = "noche", comidas, categorias, car
             <li
               key={c.id}
               className={`tarjeta grid items-center gap-x-3 gap-y-3 p-3 ${
-                conCarta
+                conFotos
                   ? "grid-cols-[56px_1fr] lg:grid-cols-[56px_minmax(0,1fr)_160px_120px_90px_auto]"
-                  : "grid-cols-1 lg:grid-cols-[minmax(0,1fr)_160px_110px_auto]"
+                  : conCarta
+                    ? "grid-cols-2 lg:grid-cols-[minmax(0,1fr)_160px_120px_90px_auto]"
+                    : "grid-cols-1 lg:grid-cols-[minmax(0,1fr)_160px_110px_auto]"
               } ${c.activo ? "" : "opacity-60"}`}
             >
-              {!conCarta ? null : c.imagen_url ? (
+              {!conFotos ? null : c.imagen_url ? (
                 <img
                   src={urlImagen(c.imagen_url, { ancho: 112, proporcion: "1:1" })}
                   alt={c.nombre}
@@ -184,7 +188,7 @@ export default function ListaComidas({ turno = "noche", comidas, categorias, car
                 </div>
               )}
 
-              <div className="min-w-0">
+              <div className={`min-w-0 ${conCarta && !conFotos ? "col-span-2 lg:col-span-1" : ""}`}>
                 <p className="flex items-center gap-1 truncate font-semibold">
                   {c.destacado && <IconoEstrella className="size-3.5 shrink-0 text-palmera" />}
                   <span className="truncate">{c.nombre}</span>
@@ -280,7 +284,7 @@ export default function ListaComidas({ turno = "noche", comidas, categorias, car
       <Confirmar
         abierto={Boolean(aBorrar)}
         titulo="Borrar comida"
-        mensaje={`¿Seguro que querés borrar "${aBorrar?.nombre ?? ""}"?${conCarta ? " También se borra su imagen." : " También sale del cronograma del menú."} Las ventas anteriores se conservan. Si solo querés ocultarla (por ejemplo, si hoy no hay), desactivala.`}
+        mensaje={`¿Seguro que querés borrar "${aBorrar?.nombre ?? ""}"?${conCarta ? (aBorrar?.imagen_url ? " También se borra su imagen." : "") : " También sale del cronograma del menú."} Las ventas anteriores se conservan. Si solo querés ocultarla (por ejemplo, si hoy no hay), desactivala.`}
         textoConfirmar="Borrar"
         procesando={borrando}
         onConfirmar={borrar}

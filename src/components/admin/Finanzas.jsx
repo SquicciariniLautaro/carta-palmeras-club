@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { supabase, mensajeDeError } from "../../lib/supabase";
-import { claveDia, fechaInput, formatearPesos, formatearPorcentaje } from "../../lib/formato";
+import { cantidad, claveDia, fechaInput, formatearPesos, formatearPorcentaje } from "../../lib/formato";
 import { descargarExcel } from "../../lib/excel";
 import { hojaArqueos, hojaCobros, hojaCuentas, hojaGastos, hojaProductos, hojaVentas } from "../../lib/reportes";
 import { IconoAlerta, IconoExcel } from "../ui/Iconos";
@@ -164,7 +164,7 @@ function hojaResumen(r, periodo) {
     subtitulo: `Período: ${textoPeriodo(periodo)}`,
     filas: [
       { seccion: "Resultado (devengado)" },
-      { concepto: "Ventas cobradas del período", valor: r.ventas, detalle: `${r.cantidadVentas} ventas cerradas (incluye lo vendido a cuenta corriente)` },
+      { concepto: "Ventas cobradas del período", valor: r.ventas, detalle: `${cantidad(r.cantidadVentas, "venta cerrada", "ventas cerradas")} (incluye lo vendido a cuenta corriente)` },
       { concepto: "   Venta noche", valor: r.ventasNoche },
       { concepto: "   Venta mediodía", valor: r.ventasMediodia },
       { concepto: "   Cancha (alquileres)", valor: r.ventasCancha },
@@ -350,7 +350,7 @@ export default function Finanzas() {
                 )
               }
             />
-            <Tarjeta titulo="Ticket promedio" valor={formatearPesos(r.cantidadVentas ? r.ventas / r.cantidadVentas : 0)} detalle={`${r.cantidadVentas} ventas`} />
+            <Tarjeta titulo="Ticket promedio" valor={formatearPesos(r.cantidadVentas ? r.ventas / r.cantidadVentas : 0)} detalle={cantidad(r.cantidadVentas, "venta", "ventas")} />
             <Tarjeta titulo="Costos fijos sobre ventas" valor={r.ventas > 0 ? formatearPorcentaje(r.gastosFijos / r.ventas) : "—"} detalle="Cuánto de cada peso vendido va a fijos" />
           </div>
 

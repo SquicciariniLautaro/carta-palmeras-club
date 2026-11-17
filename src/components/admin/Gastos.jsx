@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { supabase, mensajeDeError } from "../../lib/supabase";
-import { fechaInput, formatearFecha, formatearPesos, formatearPorcentaje } from "../../lib/formato";
+import { cantidad, fechaInput, formatearFecha, formatearPesos, formatearPorcentaje } from "../../lib/formato";
 import { descargarExcel } from "../../lib/excel";
 import { hojaGastos } from "../../lib/reportes";
 import { useCaja } from "../../hooks/useCaja";
@@ -420,7 +420,7 @@ export default function Gastos() {
             <div className="tarjeta p-4">
               <p className="text-xs text-tinta-suave">Por pagar (todas las fechas)</p>
               <p className="cifras mt-1 text-xl font-bold text-brasa">{formatearPesos(totalPorPagar)}</p>
-              <p className="text-xs text-tinta-suave">{resultado.pendientes.length} facturas pendientes</p>
+              <p className="text-xs text-tinta-suave">{cantidad(resultado.pendientes.length, "factura pendiente", "facturas pendientes")}</p>
             </div>
           </div>
 

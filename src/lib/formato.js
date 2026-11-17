@@ -97,3 +97,9 @@ export function formatearHora(valor) {
 export function formatearPorcentaje(valor) {
   return `${(Number(valor) * 100).toLocaleString("es-AR", { maximumFractionDigits: 1 })} %`;
 }
+
+// "1 venta" / "3 ventas"
+export function cantidad(n, uno, varios) {
+  const numero = Number(n ?? 0);
+  return `${numero} ${numero === 1 ? uno : varios}`;
+}

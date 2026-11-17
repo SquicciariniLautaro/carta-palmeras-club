@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { supabase, mensajeDeError } from "../../lib/supabase";
-import { formatearFechaHora } from "../../lib/formato";
+import { cantidad, formatearFechaHora } from "../../lib/formato";
 import { descargarExcel } from "../../lib/excel";
 import { nombreUsuario, useRol } from "../../hooks/useRol";
 import { IconoBasura, IconoEditar, IconoExcel, IconoMas } from "../ui/Iconos";
@@ -137,7 +137,7 @@ function Ajustar({ comida, onCerrar, onAjustado }) {
       </label>
       {real !== "" && diferencia !== 0 && (
         <p className={`text-sm font-semibold ${diferencia < 0 ? "text-brasa" : "text-emerald-800"}`}>
-          {diferencia < 0 ? `Faltan ${-diferencia} unidades` : `Sobran ${diferencia} unidades`}
+          {diferencia < 0 ? `Faltan ${cantidad(-diferencia, "unidad", "unidades")}` : `Sobran ${cantidad(diferencia, "unidad", "unidades")}`}
         </p>
       )}
       <label className="block">
@@ -272,7 +272,7 @@ export default function Stock({ turno, comidas, categorias, cargando, actualizac
           {sin > 0 && <strong>{sin === 1 ? "1 producto sin stock" : `${sin} productos sin stock`}</strong>}
           {sin > 0 && bajos > 0 && " y "}
           {bajos > 0 && <strong>{bajos === 1 ? "1 con poco stock" : `${bajos} con poco stock`}</strong>}
-          . Avisale al dueño o cargá la mercadería cuando llegue.
+          {esDueno ? ". Comprá o cargá la mercadería cuando llegue." : ". Avisale al dueño o cargá la mercadería cuando llegue."}
         </p>
       )}
 

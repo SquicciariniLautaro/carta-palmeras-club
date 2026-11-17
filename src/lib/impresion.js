@@ -98,7 +98,10 @@ function siguiente() {
     estilo.id = "estilo-impresion";
     document.head.appendChild(estilo);
   }
-  estilo.textContent = `@media print { @page { size: ${ancho}mm auto; margin: 0; } }`;
+  // El largo del papel lo pone el driver de la ticketera (rollo continuo). Cada
+  // impresión es un trabajo aparte: con "Corte al final del documento" en el
+  // driver, cada comanda sale cortada (ver ConfigImpresora, paso 4).
+  estilo.textContent = `@media print { @page { margin: 0; } }`;
   zona.className = ancho === 58 ? "ticket-58" : "ticket-80";
   zona.innerHTML = html;
   document.body.classList.add("imprimiendo");
