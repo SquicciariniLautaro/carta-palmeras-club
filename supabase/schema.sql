@@ -871,7 +871,7 @@ begin
     ('categorias',       'insert or update or delete', 'Las categorías las cambia solo el dueño.'),
     ('horarios',         'insert or update or delete', 'Los horarios los cambia solo el dueño.'),
     ('menu_dia',         'insert or update or delete', 'El menú del día lo arma solo el dueño.'),
-    ('comidas',          'insert or delete',           'Los productos los crea y los borra solo el dueño.'),
+    ('comidas',          'delete',                     'Borrar un producto lo puede hacer solo el dueño.'),
     ('cajas',            'delete',                     'Solo el dueño puede borrar un arqueo.'),
     ('caja_movimientos', 'update or delete',           'Solo el dueño puede borrar o cambiar un ingreso o retiro.'),
     ('clientes',         'delete',                     'Solo el dueño puede borrar una cuenta corriente.'),
@@ -885,8 +885,7 @@ end;
 $$;
 
 -- Columnas que el empleado sí puede cambiar a mano (lo demás, solo el dueño):
--- de una comida, si hay o no hay; de una venta, el estado; de la caja, el
--- conteo y la nota; de un cliente, sus datos pero no el límite ni la baja.
+-- de una venta, el estado; de la caja, el conteo y la nota; de un cliente, sus datos pero no el límite ni la baja.
 create or replace function public._solo_estas_columnas()
 returns trigger
 language plpgsql
@@ -915,9 +914,8 @@ begin
 end;
 $$;
 
+-- Las comidas las agrega y edita también el empleado (solo el dueño las borra)
 drop trigger if exists comidas_permisos on public.comidas;
-create trigger comidas_permisos before update on public.comidas
-  for each row execute function public._solo_estas_columnas('activo', 'updated_at');
 
 drop trigger if exists cajas_permisos on public.cajas;
 create trigger cajas_permisos before update on public.cajas

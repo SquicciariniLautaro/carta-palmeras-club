@@ -98,19 +98,15 @@ export default function ListaComidas({ turno = "noche", comidas, categorias, car
               : "Uso interno: no aparecen en la carta online y no llevan foto."}
           </p>
         </div>
-        {esDueno ? (
         <button
           type="button"
           className="boton-primario"
           onClick={() => setEditando("nueva")}
           disabled={categorias.length === 0}
-          title={categorias.length === 0 ? "Primero creá una categoría" : undefined}
+          title={categorias.length === 0 ? (esDueno ? "Primero creá una categoría" : "Primero el dueño tiene que crear una categoría") : undefined}
         >
           <IconoMas className="size-4" /> {conCarta ? "Nueva comida" : "Nuevo plato"}
         </button>
-        ) : (
-          <p className="max-w-xs text-xs text-tinta-suave">Los productos y los precios los cambia el dueño. Vos marcás si hay o no hay.</p>
-        )}
       </div>
 
       {sinPrecio > 0 && (
@@ -120,9 +116,7 @@ export default function ListaComidas({ turno = "noche", comidas, categorias, car
               {sinPrecio === 1 ? "1 plato todavía no tiene precio." : `${sinPrecio} platos todavía no tienen precio.`}
             </span>{" "}
             <span className="text-tinta-suave">
-              {esDueno
-                ? "Tocá Editar, poné el precio y guardá: ahí queda disponible para vender."
-                : "Hasta que el dueño les ponga precio no se pueden vender."}
+              Tocá Editar, poné el precio y guardá: ahí queda disponible para vender.
             </span>
           </p>
           <button type="button" className="boton-secundario px-3 py-2" onClick={() => setSoloSinPrecio(!verSinPrecio)}>
@@ -219,7 +213,7 @@ export default function ListaComidas({ turno = "noche", comidas, categorias, car
               </div>
 
               {conCarta && (
-              <label className={`flex items-center gap-2 text-xs text-tinta-suave ${esDueno ? "" : "invisible"}`}>
+              <label className="flex items-center gap-2 text-xs text-tinta-suave">
                 <Interruptor
                   activo={c.destacado}
                   etiqueta={`Destacado: ${c.nombre}`}
@@ -236,7 +230,7 @@ export default function ListaComidas({ turno = "noche", comidas, categorias, car
                   activo={c.activo}
                   etiqueta={`Activo: ${c.nombre}`}
                   bloqueado={c.precio == null}
-                  motivo={esDueno ? "Primero ponele precio: tocá Editar." : "Todavía no tiene precio: se lo pone el dueño."}
+                  motivo="Primero ponele precio: tocá Editar."
                   onCambiar={() =>
                     actualizar(
                       c,
@@ -250,18 +244,20 @@ export default function ListaComidas({ turno = "noche", comidas, categorias, car
                 {conCarta ? "Activo" : "Disponible"}
               </label>
 
-              <div className={`flex justify-end gap-2 lg:col-span-1 ${conCarta ? "col-span-2" : ""} ${esDueno ? "" : "invisible"}`}>
+              <div className={`flex justify-end gap-2 lg:col-span-1 ${conCarta ? "col-span-2" : ""}`}>
                 <button type="button" className="boton-secundario px-3 py-2" onClick={() => setEditando(c)}>
                   <IconoEditar className="size-4" /> Editar
                 </button>
-                <button
-                  type="button"
-                  className="boton-secundario px-3 py-2 hover:text-brasa"
-                  onClick={() => setABorrar(c)}
-                  aria-label={`Borrar ${c.nombre}`}
-                >
-                  <IconoBasura className="size-4" />
-                </button>
+                {esDueno && (
+                  <button
+                    type="button"
+                    className="boton-secundario px-3 py-2 hover:text-brasa"
+                    onClick={() => setABorrar(c)}
+                    aria-label={`Borrar ${c.nombre}`}
+                  >
+                    <IconoBasura className="size-4" />
+                  </button>
+                )}
               </div>
             </li>
           ))}
