@@ -12,7 +12,14 @@ import { METODOS_PAGO, TURNOS, esEnvio } from "../components/admin/ventasUtils";
 
 const CLAVE = "palmeras.impresora";
 const CLAVE_MODO = "palmeras.impresion.modo";
+const CLAVE_CORTADOR = "palmeras.cortador";
 export const EVENTO_MODO = "palmeras:modo-impresion";
+export const EVENTO_CORTADOR = "palmeras:cortador";
+
+// El "cortador" lo instala el instalador de la ticketera (instalador-panel.ps1) cuando el
+// driver no trae la opción de cortar (el genérico POS-80): un programita en la computadora
+// del local que le manda a la ticketera la orden de corte después de cada impresión.
+const CORTADOR = "http://127.0.0.1:17580";
 
 export const CONFIG_IMPRESORA = Object.freeze({
   ancho: 80, // mm del papel: 80 o 58
@@ -38,6 +45,48 @@ function guardarModo(modo) {
     // modo privado: igual avisamos en esta sesión
   }
   window.dispatchEvent(new CustomEvent(EVENTO_MODO, { detail: modo }));
+}
+
+// "si" si el cortador respondió alguna vez en esta computadora: desde ahí se le pide el
+// corte en cada impresión (aunque una falle, por ejemplo si recién se prendió la compu).
+export function leerCortador() {
+  try {
+    return localStorage.getItem(CLAVE_CORTADOR);
+  } catch {
+    return null;
+  }
+}
+
+// El evento lleva el resultado del último pedido: "si" (cortó) o "fallo"
+function avisarCortador(ok) {
+  if (ok) {
+    try {
+      localStorage.setItem(CLAVE_CORTADOR, "si");
+    } catch {
+      // modo privado
+    }
+  }
+  window.dispatchEvent(new CustomEvent(EVENTO_CORTADOR, { detail: ok ? "si" : "fallo" }));
+}
+
+// Pide el corte del papel. El cortador espera a que la comanda entre a la cola de Windows
+// y recién ahí corta, así que se llama después de window.print(). La primera vez Chrome
+// pregunta si el panel puede usar apps de esta computadora: hay que tocar Permitir (por
+// eso el tiempo de espera es largo). Devuelve true si cortó.
+export async function cortarPapel() {
+  const control = new AbortController();
+  const espera = setTimeout(() => control.abort(), 30_000);
+  let ok;
+  try {
+    const r = await fetch(`${CORTADOR}/cortar`, { signal: control.signal, cache: "no-store", targetAddressSpace: "loopback" });
+    ok = r.ok && (await r.json()).ok === true;
+  } catch {
+    ok = false;
+  } finally {
+    clearTimeout(espera);
+  }
+  avisarCortador(ok);
+  return ok;
 }
 
 export function leerConfigImpresora() {
@@ -72,18 +121,22 @@ const TARDA_CON_DIALOGO_MS = 1500;
 const cola = [];
 let imprimiendo = false;
 
-function imprimirHtml(html) {
-  cola.push(html);
+// probarCorte: pide el corte aunque esta computadora todavía no tenga el cortador
+// (lo usa "Imprimir prueba"); si no, solo donde ya respondió alguna vez, así en el
+// celular o en otra computadora no se intenta.
+function imprimirHtml(html, { probarCorte = false } = {}) {
+  cola.push({ html, probarCorte });
   if (!imprimiendo) siguiente();
 }
 
 function siguiente() {
-  const html = cola.shift();
-  if (html === undefined) {
+  const trabajo = cola.shift();
+  if (trabajo === undefined) {
     imprimiendo = false;
     return;
   }
   imprimiendo = true;
+  const { html, probarCorte } = trabajo;
 
   const { ancho } = leerConfigImpresora();
   let zona = document.getElementById("zona-impresion");
@@ -99,8 +152,8 @@ function siguiente() {
     document.head.appendChild(estilo);
   }
   // El largo del papel lo pone el driver de la ticketera (rollo continuo). Cada
-  // impresión es un trabajo aparte: con "Corte al final del documento" en el
-  // driver, cada comanda sale cortada (ver ConfigImpresora, paso 4).
+  // impresión es un trabajo aparte: la corta el driver ("Corte al final del
+  // documento") o, si no tiene esa opción, el cortador (ver cortarPapel).
   estilo.textContent = `@media print { @page { margin: 0; } }`;
   zona.className = ancho === 58 ? "ticket-58" : "ticket-80";
   zona.innerHTML = html;
@@ -108,6 +161,7 @@ function siguiente() {
 
   let terminado = false;
   let reserva = 0;
+  let corte = Promise.resolve();
   const terminar = () => {
     if (terminado) return;
     terminado = true;
@@ -115,7 +169,10 @@ function siguiente() {
     clearTimeout(reserva);
     document.body.classList.remove("imprimiendo");
     zona.innerHTML = "";
-    setTimeout(siguiente, 300);
+    // La siguiente comanda espera a que el corte de esta ya esté en la cola de Windows:
+    // si no, el corte podía salir después de la siguiente y quedaban las dos pegadas.
+    // (setTimeout: afterprint puede llegar antes de que window.print() termine)
+    setTimeout(() => corte.finally(() => setTimeout(siguiente, 300)), 0);
   };
   window.addEventListener("afterprint", terminar);
   // setTimeout y no requestAnimationFrame: con la pestaña en segundo plano
@@ -125,6 +182,7 @@ function siguiente() {
     const inicio = performance.now();
     window.print();
     guardarModo(performance.now() - inicio > TARDA_CON_DIALOGO_MS ? "dialogo" : "directa");
+    if (probarCorte || leerCortador() === "si") corte = cortarPapel();
     reserva = setTimeout(terminar, 60_000); // por si el navegador no avisa que terminó
   }, 50);
 }
@@ -135,7 +193,7 @@ function lineaEntrega(venta) {
 }
 
 // Comanda para la cocina: grande, sin precios
-export function imprimirComanda(venta) {
+export function imprimirComanda(venta, opciones) {
   const items = (venta.venta_items ?? [])
     .map(
       (i) => `<div class="t-item"><span class="t-cant">${i.cantidad}</span><span><strong>${esc(i.nombre)}</strong>${
@@ -155,7 +213,9 @@ export function imprimirComanda(venta) {
       <hr>
       ${venta.nota ? `<p class="t-nota"><strong>NOTA:</strong> ${esc(venta.nota)}</p>` : ""}
       <p class="t-centro t-chico">Impreso ${esc(formatearFechaHora(new Date()))}</p>
-    </div>`);
+    </div>`,
+    opciones
+  );
 }
 
 // Ticket de la venta para el cliente (no fiscal)

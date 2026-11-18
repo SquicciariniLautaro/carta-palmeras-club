@@ -1,6 +1,15 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { EVENTO_MODO, guardarConfigImpresora, imprimirComanda, leerConfigImpresora, leerModoImpresion } from "../../lib/impresion";
+import {
+  EVENTO_CORTADOR,
+  EVENTO_MODO,
+  cortarPapel,
+  guardarConfigImpresora,
+  imprimirComanda,
+  leerConfigImpresora,
+  leerCortador,
+  leerModoImpresion,
+} from "../../lib/impresion";
 import { IconoImpresora } from "../ui/Iconos";
 import Modal from "../ui/Modal";
 import { NOMBRE_INSTALADOR, descargarInstalador } from "../../lib/instalador";
@@ -63,7 +72,7 @@ function Instalador() {
       <p className="font-semibold">Dejarla lista en un minuto (recomendado)</p>
       <p className="text-xs text-tinta-suave">
         Hacelo en la computadora del local, con la ticketera prendida y conectada. El instalador la deja como impresora predeterminada,
-        activa el corte del papel y crea en el escritorio el acceso directo <strong>Panel Palmeras</strong>: una ventana de Chrome solo
+        hace que corte el papel (aunque el driver no tenga esa opción) y crea en el escritorio el acceso directo <strong>Panel Palmeras</strong>: una ventana de Chrome solo
         para el panel, que imprime la comanda sin preguntar.
       </p>
       <ol className="list-decimal space-y-1 pl-4 text-xs text-tinta-suave">
@@ -76,7 +85,8 @@ function Instalador() {
         </li>
         <li>Escribí el número de la ticketera de la lista y respondé las preguntas. Al final se abre el panel solo.</li>
         <li>
-          Entrá con tu usuario y tocá <strong>Ticketera</strong> → <strong>Imprimir prueba</strong>: tiene que salir sola y cortada.
+          Entrá con tu usuario y tocá <strong>Ticketera</strong> → <strong>Imprimir prueba</strong>: tiene que salir sola y cortada. Si
+          Chrome pregunta si el panel puede usar <em>apps y dispositivos de esta computadora</em>, tocá <strong>Permitir</strong>.
         </li>
       </ol>
       <button type="button" className="boton-primario w-full text-sm" onClick={descargar}>
@@ -139,6 +149,54 @@ function EstadoImpresion() {
   );
 }
 
+// El corte del papel cuando el driver no lo hace (lo instala el instalador, paso 4)
+function EstadoCorte() {
+  const [estado, setEstado] = useState(leerCortador);
+  const [probando, setProbando] = useState(false);
+  useEffect(() => {
+    const alCambiar = (e) => setEstado(e.detail);
+    window.addEventListener(EVENTO_CORTADOR, alCambiar);
+    return () => window.removeEventListener(EVENTO_CORTADOR, alCambiar);
+  }, []);
+
+  async function probar() {
+    setProbando(true);
+    const ok = await cortarPapel();
+    setProbando(false);
+    if (ok) toast.success("La ticketera cortó el papel");
+    else toast.error("El cortador no respondió en esta computadora");
+  }
+
+  const boton = (
+    <button type="button" className="boton-secundario shrink-0 px-2.5 py-1.5 text-xs" onClick={probar} disabled={probando}>
+      {probando ? "Cortando…" : "Probar corte"}
+    </button>
+  );
+
+  if (estado === "si") {
+    return (
+      <div className="flex items-center gap-3 rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900">
+        <p className="flex-1">
+          <strong>Corta el papel.</strong> El cortador está andando: después de cada comanda la ticketera corta.
+        </p>
+        {boton}
+      </div>
+    );
+  }
+  if (estado === "fallo") {
+    return (
+      <div className="flex items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+        <p className="flex-1">
+          <strong>No corta.</strong> El cortador no respondió. Si Chrome preguntó por "apps y dispositivos de esta computadora", tocá{" "}
+          <strong>Permitir</strong>. Si no, volvé a abrir el instalador (paso 4).
+        </p>
+        {boton}
+      </div>
+    );
+  }
+  return null;
+}
+
 function Contenido({ onCerrar }) {
   const [config, setConfig] = useState(leerConfigImpresora);
   const set = (cambios) => setConfig((c) => ({ ...c, ...cambios }));
@@ -152,6 +210,7 @@ function Contenido({ onCerrar }) {
   return (
     <div className="space-y-4">
       <EstadoImpresion />
+      <EstadoCorte />
 
       <div>
         <span className="etiqueta">Ancho del papel</span>
@@ -274,8 +333,10 @@ function Contenido({ onCerrar }) {
           </li>
           <li>Tocá Aplicar → Aceptar y volvé a tocar Imprimir prueba: la comanda tiene que salir cortada.</li>
           <li>
-            Si en las Preferencias no aparece ninguna opción de corte, Windows está usando un driver genérico (por ejemplo "Generic / Text
-            Only"): instalá el driver de la marca del paso 1 y elegí ese.
+            Si en las Preferencias no aparece ninguna opción de corte (pasa con el driver genérico <strong>POS-80</strong>), usá el{" "}
+            <strong>instalador</strong> de arriba: instala un "cortador" que le manda la orden de corte a la ticketera después de cada
+            comanda, como el programa que usaban antes. La primera vez Chrome pregunta si el panel puede usar{" "}
+            <em>apps y dispositivos de esta computadora</em>: tocá <strong>Permitir</strong>.
           </li>
         </Paso>
       </div>
@@ -286,7 +347,7 @@ function Contenido({ onCerrar }) {
           className="boton-secundario"
           onClick={() => {
             guardarConfigImpresora(config);
-            imprimirComanda({ ...PRUEBA, created_at: new Date().toISOString() });
+            imprimirComanda({ ...PRUEBA, created_at: new Date().toISOString() }, { probarCorte: true });
           }}
         >
           <IconoImpresora className="size-4" /> Imprimir prueba

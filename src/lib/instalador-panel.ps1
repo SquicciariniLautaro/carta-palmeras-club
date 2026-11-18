@@ -5,7 +5,8 @@
 #   1. Busca Google Chrome.
 #   2. Pregunta cuál es la ticketera y la deja como impresora predeterminada.
 #   3. Intenta activar en el driver "Corte al final del documento" (o el corte que tenga);
-#      si el driver no lo deja, abre sus Preferencias para elegirlo a mano.
+#      si el driver no tiene esa opción (el genérico POS-80), instala el "cortador": un
+#      programita escondido que le manda la orden de corte a la ticketera después de cada comanda.
 #   4. Crea el acceso directo "Panel Palmeras" en el escritorio: abre el panel en una
 #      ventana propia de Chrome que imprime sin el cuadro de diálogo (--kiosk-printing)
 #      y deja sonar el aviso de pedido sin tocar la pantalla antes.
@@ -143,15 +144,157 @@ try {
 } catch {
   Info ('(El driver no deja cambiar el corte desde acá: ' + $_.Exception.Message + ')')
 }
-if (-not $cortaSola) {
-  Ojo 'El corte hay que elegirlo a mano, una sola vez. Se abre la ventana de Preferencias de la ticketera:'
-  Info '- Buscá la opción de corte: Corte de papel, Paper Cut, Cutter o Cut Mode'
-  Info '  (a veces está adentro de "Opciones avanzadas" o en la pestaña "Device Settings").'
-  Info '- Elegí "Corte al final del documento" (Cut at end of document) o "Corte parcial".'
-  Info '- Tocá Aplicar y Aceptar. Si no aparece ninguna opción de corte, falta el driver de la marca.'
-  Hacer 'Abrir las Preferencias de impresión de la ticketera' {
-    Start-Process -FilePath 'rundll32.exe' -ArgumentList ('printui.dll,PrintUIEntry /e /n "' + $ticketera + '"') -Wait
+# El driver genérico "POS-80" muchas veces no trae ninguna opción de corte. Para eso queda
+# el "cortador": un programita que corre escondido en esta computadora y, cuando el panel
+# termina de imprimir, le manda a la ticketera la orden de corte (ESC/POS) directamente,
+# igual que el programa de comandas que usaban antes.
+$instalarCortador = $true
+if ($cortaSola) {
+  Info 'El driver ya corta solo. Si al imprimir la prueba no corta, volvé a abrir el instalador y respondé S.'
+  $instalarCortador = (Preguntar 'Instalar igual el cortador? (S/N, Enter = N)' 'N') -match '^[sS]'
+}
+$carpetaCortador = Join-Path $env:LOCALAPPDATA 'PanelPalmeras'
+$cortador = Join-Path $carpetaCortador 'cortador.ps1'
+$powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+$argumentosCortador = '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $cortador + '"'
+$inicio = Join-Path ([Environment]::GetFolderPath('Startup')) 'Cortador Palmeras.lnk'
+$origenPanel = ([Uri]$PANEL).GetLeftPart([UriPartial]::Authority)
+
+# Si ya estaba corriendo (instalación anterior), se cierra para poner el nuevo
+$viejos = @(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.CommandLine -like '*cortador.ps1*' })
+if ($viejos.Count -gt 0) {
+  Hacer 'Cerrar el cortador que estaba corriendo' { $viejos | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; Start-Sleep -Seconds 1 }
+}
+
+if ($instalarCortador) {
+  $codigoCortador = @'
+# Cortador Palmeras: corta el papel de la ticketera después de cada comanda del panel.
+# Lo instala "Instalar Panel Palmeras.bat" y se abre solo, escondido, al prender la computadora.
+# Escucha solo en esta computadora (127.0.0.1) y solo le contesta al panel.
+$ErrorActionPreference = 'Stop'
+$TICKETERA = '__TICKETERA__'
+$ORIGEN = '__ORIGEN__'
+$PUERTO = 17580
+
+$unico = $false
+$candado = [System.Threading.Mutex]::new($true, 'CortadorPalmeras', [ref]$unico)
+if (-not $unico) { exit }
+
+Add-Type -AssemblyName System.Printing
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class TicketeraCruda {
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+  public class DocInfo { public string pDocName; public string pOutputFile; public string pDatatype; }
+  [DllImport("winspool.drv", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool OpenPrinter(string nombre, out IntPtr h, IntPtr d);
+  [DllImport("winspool.drv", SetLastError = true)] static extern bool ClosePrinter(IntPtr h);
+  [DllImport("winspool.drv", CharSet = CharSet.Unicode, SetLastError = true)] static extern int StartDocPrinter(IntPtr h, int nivel, [In] DocInfo info);
+  [DllImport("winspool.drv", SetLastError = true)] static extern bool EndDocPrinter(IntPtr h);
+  [DllImport("winspool.drv", SetLastError = true)] static extern bool StartPagePrinter(IntPtr h);
+  [DllImport("winspool.drv", SetLastError = true)] static extern bool EndPagePrinter(IntPtr h);
+  [DllImport("winspool.drv", SetLastError = true)] static extern bool WritePrinter(IntPtr h, byte[] datos, int largo, out int escritos);
+  public static void Enviar(string impresora, byte[] datos) {
+    IntPtr h;
+    if (!OpenPrinter(impresora, out h, IntPtr.Zero)) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+    try {
+      DocInfo info = new DocInfo();
+      info.pDocName = "Corte Palmeras";
+      info.pDatatype = "RAW";
+      if (StartDocPrinter(h, 1, info) == 0) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+      try {
+        StartPagePrinter(h);
+        int escritos;
+        if (!WritePrinter(h, datos, datos.Length, out escritos)) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        EndPagePrinter(h);
+      } finally { EndDocPrinter(h); }
+    } finally { ClosePrinter(h); }
   }
+}
+"@
+
+function Trabajos {
+  $servidor = New-Object System.Printing.LocalPrintServer
+  try {
+    $cola = $servidor.GetPrintQueue($TICKETERA)
+    @($cola.GetPrintJobInfoCollection() | ForEach-Object { [pscustomobject]@{ Armando = [bool]$_.IsSpooling } })
+  } finally { $servidor.Dispose() }
+}
+
+# Espera a que Chrome termine de mandar la comanda a la cola de Windows y recién ahí
+# manda el corte: así sale después de la comanda y no antes.
+function Cortar {
+  $limite = (Get-Date).AddSeconds(3)
+  while ((Get-Date) -lt $limite -and @(Trabajos).Count -eq 0) { Start-Sleep -Milliseconds 150 }
+  $limite = (Get-Date).AddSeconds(20)
+  while ((Get-Date) -lt $limite -and @(Trabajos | Where-Object { $_.Armando }).Count -gt 0) { Start-Sleep -Milliseconds 150 }
+  # ESC d 3: avanza 3 renglones · GS V 1: corte parcial (si la cuchilla solo hace corte total, hace ese)
+  [TicketeraCruda]::Enviar($TICKETERA, [byte[]](0x1B, 0x64, 0x03, 0x1D, 0x56, 0x01))
+}
+
+$escucha = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Loopback, $PUERTO)
+$escucha.Start()
+while ($true) {
+  $cliente = $escucha.AcceptTcpClient()
+  try {
+    $cliente.ReceiveTimeout = 5000
+    $flujo = $cliente.GetStream()
+    $lector = New-Object System.IO.StreamReader($flujo, [System.Text.Encoding]::ASCII)
+    $partes = "$($lector.ReadLine())".Split(' ')
+    $origen = ''
+    while ($true) {
+      $linea = $lector.ReadLine()
+      if ([string]::IsNullOrEmpty($linea)) { break }
+      if ($linea -match '^Origin:\s*(.+)$') { $origen = $Matches[1].Trim() }
+    }
+    $metodo = $partes[0]
+    $ruta = if ($partes.Count -gt 1) { $partes[1] } else { '/' }
+    $estado = '200 OK'
+    $respuesta = @{ ok = $true; ticketera = $TICKETERA }
+    if ($origen -and $origen -ne $ORIGEN) {
+      $estado = '403 Forbidden'; $respuesta = @{ ok = $false; error = 'origen' }
+    } elseif ($metodo -eq 'OPTIONS') {
+      $respuesta = @{ ok = $true }
+    } elseif ($ruta -like '/cortar*') {
+      try { Cortar } catch { $estado = '500 Internal Server Error'; $respuesta = @{ ok = $false; error = $_.Exception.Message } }
+    } elseif ($ruta -notlike '/estado*') {
+      $estado = '404 Not Found'; $respuesta = @{ ok = $false }
+    }
+    $cuerpo = [System.Text.Encoding]::UTF8.GetBytes(($respuesta | ConvertTo-Json -Compress))
+    $cabecera = "HTTP/1.1 $estado`r`nContent-Type: application/json; charset=utf-8`r`nContent-Length: $($cuerpo.Length)`r`n" +
+      "Access-Control-Allow-Origin: $ORIGEN`r`nAccess-Control-Allow-Methods: GET, OPTIONS`r`nAccess-Control-Allow-Headers: *`r`n" +
+      "Access-Control-Allow-Private-Network: true`r`nCache-Control: no-store`r`nConnection: close`r`n`r`n"
+    $bytes = [System.Text.Encoding]::ASCII.GetBytes($cabecera)
+    $flujo.Write($bytes, 0, $bytes.Length)
+    $flujo.Write($cuerpo, 0, $cuerpo.Length)
+    $flujo.Flush()
+  } catch {
+  } finally {
+    $cliente.Close()
+  }
+}
+'@
+  $codigoCortador = $codigoCortador.Replace('__TICKETERA__', $ticketera.Replace("'", "''")).Replace('__ORIGEN__', $origenPanel)
+
+  Hacer ('Guardar el cortador en ' + $cortador) {
+    New-Item -ItemType Directory -Force -Path $carpetaCortador | Out-Null
+    [System.IO.File]::WriteAllText($cortador, $codigoCortador, (New-Object System.Text.UTF8Encoding($true)))
+  }
+  Hacer 'Que el cortador se abra solo (escondido) al prender la computadora' {
+    $shell = New-Object -ComObject WScript.Shell
+    $acceso = $shell.CreateShortcut($inicio)
+    $acceso.TargetPath = $powershell
+    $acceso.Arguments = $argumentosCortador
+    $acceso.WindowStyle = 7
+    $acceso.Description = 'Corta el papel de la ticketera después de cada comanda del Panel Palmeras'
+    $acceso.Save()
+  }
+  Hacer 'Prender el cortador ahora' { Start-Process -FilePath $powershell -ArgumentList $argumentosCortador -WindowStyle Hidden }
+  Bien 'Cortador instalado: después de cada comanda la ticketera corta el papel'
+  Info 'La primera vez que imprimas, Chrome puede preguntar si el panel puede usar "apps y dispositivos'
+  Info 'de esta computadora" (o "red local"): tocá PERMITIR. Es el permiso para hablar con el cortador.'
+} elseif (Test-Path -LiteralPath $inicio) {
+  Hacer 'Quitar el cortador (el driver ya corta)' { Remove-Item -LiteralPath $inicio -Force }
 }
 
 # ---------------------------------------------------------------------------
