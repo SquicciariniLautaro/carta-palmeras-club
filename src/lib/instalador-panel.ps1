@@ -157,7 +157,10 @@ $carpetaCortador = Join-Path $env:LOCALAPPDATA 'PanelPalmeras'
 $cortador = Join-Path $carpetaCortador 'cortador.ps1'
 $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 $argumentosCortador = '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $cortador + '"'
-$inicio = Join-Path ([Environment]::GetFolderPath('Startup')) 'Cortador Palmeras.lnk'
+# Lo que arranca solo al prender la computadora va en el registro (Run) y no en la carpeta
+# Inicio: en algunas computadoras esa carpeta no está donde Windows dice o no deja escribir.
+$arranque = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+$inicioViejo = Join-Path ([Environment]::GetFolderPath('Startup')) 'Cortador Palmeras.lnk'
 $origenPanel = ([Uri]$PANEL).GetLeftPart([UriPartial]::Authority)
 
 # Si ya estaba corriendo (instalación anterior), se cierra para poner el nuevo
@@ -281,20 +284,23 @@ while ($true) {
     [System.IO.File]::WriteAllText($cortador, $codigoCortador, (New-Object System.Text.UTF8Encoding($true)))
   }
   Hacer 'Que el cortador se abra solo (escondido) al prender la computadora' {
-    $shell = New-Object -ComObject WScript.Shell
-    $acceso = $shell.CreateShortcut($inicio)
-    $acceso.TargetPath = $powershell
-    $acceso.Arguments = $argumentosCortador
-    $acceso.WindowStyle = 7
-    $acceso.Description = 'Corta el papel de la ticketera después de cada comanda del Panel Palmeras'
-    $acceso.Save()
+    try {
+      Set-ItemProperty -Path $arranque -Name 'CortadorPalmeras' -Value ('"' + $powershell + '" ' + $argumentosCortador)
+      Remove-Item -LiteralPath $inicioViejo -Force -ErrorAction SilentlyContinue
+    } catch {
+      Ojo ('No pude dejarlo para que arranque solo: ' + $_.Exception.Message)
+      Info 'Funciona igual hasta que apagues la computadora; después volvé a abrir este instalador.'
+    }
   }
   Hacer 'Prender el cortador ahora' { Start-Process -FilePath $powershell -ArgumentList $argumentosCortador -WindowStyle Hidden }
   Bien 'Cortador instalado: después de cada comanda la ticketera corta el papel'
   Info 'La primera vez que imprimas, Chrome puede preguntar si el panel puede usar "apps y dispositivos'
   Info 'de esta computadora" (o "red local"): tocá PERMITIR. Es el permiso para hablar con el cortador.'
-} elseif (Test-Path -LiteralPath $inicio) {
-  Hacer 'Quitar el cortador (el driver ya corta)' { Remove-Item -LiteralPath $inicio -Force }
+} else {
+  Hacer 'Quitar el cortador (el driver ya corta)' {
+    Remove-ItemProperty -Path $arranque -Name 'CortadorPalmeras' -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $inicioViejo -Force -ErrorAction SilentlyContinue
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -302,7 +308,10 @@ Titulo '5. El acceso directo "Panel Palmeras"'
 # --kiosk-printing: imprime sin el cuadro de Chrome · --user-data-dir: un Chrome aparte, así funciona
 # aunque el Chrome de siempre esté abierto · --app: ventana propia · --autoplay-policy: suena sin tocar antes
 $argumentos = '--kiosk-printing --autoplay-policy=no-user-gesture-required --user-data-dir="' + $PERFIL + '" --app=' + $PANEL
-$atajo = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Panel Palmeras.lnk'
+# El acceso directo se arma primero en una carpeta propia (siempre se puede escribir) y después
+# se copia al escritorio. Antes se guardaba directo en el escritorio y en algunas computadoras
+# (escritorio en OneDrive, carpeta protegida) no quedaba y el instalador se cortaba.
+$atajo = Join-Path $carpetaCortador 'Panel Palmeras.lnk'
 
 # Si la ventana del panel ya estaba abierta, hay que cerrarla para que tome los permisos nuevos
 $abiertos = @(Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | Where-Object { $_.CommandLine -like '*PanelPalmeras*' })
@@ -335,7 +344,8 @@ Hacer 'Dejar la ticketera elegida en la ventana del panel' {
   }
 }
 
-Hacer ('Crear el acceso directo en ' + $atajo) {
+Hacer 'Crear el acceso directo "Panel Palmeras"' {
+  New-Item -ItemType Directory -Force -Path $carpetaCortador | Out-Null
   $shell = New-Object -ComObject WScript.Shell
   $acceso = $shell.CreateShortcut($atajo)
   $acceso.TargetPath = $chrome
@@ -345,14 +355,53 @@ Hacer ('Crear el acceso directo en ' + $atajo) {
   $acceso.Description = 'Panel de Las Palmeras Club: imprime la comanda sola'
   $acceso.Save()
 }
-Bien 'Acceso directo "Panel Palmeras" en el escritorio'
+
+# Todas las formas de preguntarle a Windows dónde está el escritorio (no siempre coinciden)
+$escritorios = @()
+try { $escritorios += (New-Object -ComObject Shell.Application).Namespace(0x10).Self.Path } catch { }
+try { $escritorios += [Environment]::GetFolderPath('Desktop') } catch { }
+try { $escritorios += (New-Object -ComObject WScript.Shell).SpecialFolders.Item('Desktop') } catch { }
+$escritorios = @($escritorios | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Container) } | Select-Object -Unique)
+$enEscritorio = $false
+if ($PRUEBA) {
+  Hacer ('Copiar el acceso directo a: ' + ($escritorios -join ' | ')) { }
+  $enEscritorio = $true
+} elseif (Test-Path -LiteralPath $atajo) {
+  foreach ($carpeta in $escritorios) {
+    try {
+      $destino = Join-Path $carpeta 'Panel Palmeras.lnk'
+      Copy-Item -LiteralPath $atajo $destino -Force
+      if (Test-Path -LiteralPath $destino) { $enEscritorio = $true }
+    } catch { }
+  }
+}
+if ($enEscritorio) {
+  Bien 'Acceso directo "Panel Palmeras" en el escritorio'
+} elseif (Test-Path -LiteralPath $atajo) {
+  Ojo 'Windows no me dejó poner el acceso directo en el escritorio.'
+  Info 'Se abre una carpeta con "Panel Palmeras" marcado: arrastralo al escritorio (o click derecho -> Anclar a la barra de tareas).'
+  Start-Process -FilePath 'explorer.exe' -ArgumentList ('/select,"' + $atajo + '"')
+} else {
+  Ojo 'No pude crear el acceso directo. Hacelo a mano con el paso 3 de la guía del panel (Ticketera).'
+}
 
 $alPrender = Preguntar 'Querés que el panel se abra solo al prender la computadora? (S/N, Enter = S)' 'S'
+$panelViejo = Join-Path ([Environment]::GetFolderPath('Startup')) 'Panel Palmeras.lnk'
 if ($alPrender -notmatch '^[nN]') {
   Hacer 'Abrir el panel solo al prender la computadora' {
-    Copy-Item -LiteralPath $atajo (Join-Path ([Environment]::GetFolderPath('Startup')) 'Panel Palmeras.lnk') -Force
+    try {
+      Set-ItemProperty -Path $arranque -Name 'PanelPalmeras' -Value ('"' + $chrome + '" ' + $argumentos)
+      Remove-Item -LiteralPath $panelViejo -Force -ErrorAction SilentlyContinue
+      Bien 'Se va a abrir solo al prender la computadora'
+    } catch {
+      Ojo ('No pude dejarlo para que se abra solo: ' + $_.Exception.Message)
+    }
   }
-  Bien 'Se va a abrir solo al prender la computadora'
+} else {
+  Hacer 'Que el panel no se abra solo' {
+    Remove-ItemProperty -Path $arranque -Name 'PanelPalmeras' -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $panelViejo -Force -ErrorAction SilentlyContinue
+  }
 }
 
 # ---------------------------------------------------------------------------
