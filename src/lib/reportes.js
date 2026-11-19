@@ -47,9 +47,37 @@ export function hojaProductos(ventas, subtitulo) {
       { titulo: "Cantidad", clave: "cantidad", tipo: "entero", ancho: 10 },
       { titulo: "Precio unitario", clave: "precio_unitario", tipo: "moneda", ancho: 15 },
       { titulo: "Subtotal", clave: "subtotal", tipo: "moneda", ancho: 15 },
+      { titulo: "Regalo", valor: (f) => (f.regalo ? "Sí" : ""), ancho: 9 },
     ],
     filas,
     totales: ["cantidad", "subtotal"],
+    notas: ["Los regalos (cortesías) van a $ 0: lo que valen en la carta está en la hoja Regalos."],
+  };
+}
+
+// Regalos (cortesías): lo que se dio sin cobrar, valuado a precio de carta
+export function hojaRegalos(regalos, subtitulo) {
+  return {
+    nombre: "Regalos",
+    titulo: "Regalos y cortesías",
+    subtitulo,
+    columnas: [
+      { titulo: "Fecha y hora", clave: "created_at", tipo: "fechaHora", ancho: 17, valor: (r) => r.ventas?.created_at },
+      { titulo: "N° venta", clave: "numero", tipo: "entero", ancho: 10, valor: (r) => r.ventas?.numero },
+      { titulo: "Turno", valor: (r) => turno(r.ventas?.turno), ancho: 11 },
+      { titulo: "Cuenta / cliente", valor: (r) => r.ventas?.cliente_nombre ?? "", ancho: 24 },
+      { titulo: "Producto", clave: "nombre", ancho: 32 },
+      { titulo: "Motivo", ancho: 30, ajustar: true, valor: (r) => (r.detalle ?? "").replace(/^Regalo( · )?/, "").replaceAll('"', "") },
+      { titulo: "Cantidad", clave: "cantidad", tipo: "entero", ancho: 10 },
+      { titulo: "Precio de carta", clave: "precio_lista", tipo: "moneda", ancho: 15 },
+      { titulo: "Valor regalado", clave: "valor", tipo: "moneda", ancho: 15, valor: (r) => Number(r.precio_lista ?? 0) * r.cantidad },
+    ],
+    filas: regalos,
+    totales: ["cantidad", "valor"],
+    notas: [
+      "Los regalos no se cobran y descuentan el stock. El valor es el precio de venta de la carta: lo que se dejó de cobrar.",
+      "No se suman a los gastos: lo que costó la mercadería ya está cargado en Gastos cuando se compró.",
+    ],
   };
 }
 

@@ -7,10 +7,12 @@ import Modal from "../ui/Modal";
 import ControlCantidad from "../catalogo/ControlCantidad";
 import { entradasDeComidas } from "./ventasUtils";
 
-const MAX_POR_LINEA = 50;
-
 // Contenido del editor: se monta de nuevo con cada pedido, así arranca con sus datos
 function Editor({ venta, comidas, onCerrar, onGuardada }) {
+  // En el local (cuentas que se llenan durante horas) se permiten más unidades por línea
+  const MAX_POR_LINEA = venta.origen === "web" ? 50 : 200;
+  // En la cuenta de un turno de cancha, el alquiler se cambia desde el turno
+  const fija = (l) => venta.turno === "cancha" && !l.comida_id;
   // Líneas que ya tenía el pedido: conservan el precio con el que se pidieron
   const [lineas, setLineas] = useState(() =>
     venta.venta_items.map((i) => ({
@@ -19,6 +21,8 @@ function Editor({ venta, comidas, onCerrar, onGuardada }) {
       detalle: i.detalle,
       precio: Number(i.precio_unitario),
       cantidad: i.cantidad,
+      comida_id: i.comida_id,
+      regalo: i.regalo,
     }))
   );
   // Líneas nuevas: toman el precio actual de la comida
@@ -88,27 +92,31 @@ function Editor({ venta, comidas, onCerrar, onGuardada }) {
             <span className="min-w-0 flex-1">
               {l.nombre}
               {l.detalle && <span className="block text-xs text-tinta-suave">{l.detalle}</span>}
-              <span className="block text-xs text-tinta-suave">{formatearPrecio(l.precio)} c/u</span>
-            </span>
-            <span className="flex items-center gap-2">
-              <span className="w-28">
-                <ControlCantidad
-                  cantidad={l.cantidad}
-                  onSumar={() => cambiarLinea(l.id, 1)}
-                  onRestar={() => cambiarLinea(l.id, -1)}
-                  nombre={l.nombre}
-                  chico
-                />
+              <span className="block text-xs text-tinta-suave">
+                {l.regalo ? "Regalo · no se cobra" : fija(l) ? `${formatearPrecio(l.precio)} · se cambia desde el turno` : `${formatearPrecio(l.precio)} c/u`}
               </span>
-              <button
-                type="button"
-                className="rounded p-1.5 text-tinta-suave hover:bg-borde hover:text-rojo"
-                onClick={() => setLineas((prev) => prev.filter((x) => x.id !== l.id))}
-                aria-label={`Sacar ${l.nombre} del pedido`}
-              >
-                <IconoBasura className="size-4" />
-              </button>
             </span>
+            {!fija(l) && (
+              <span className="flex items-center gap-2">
+                <span className="w-28">
+                  <ControlCantidad
+                    cantidad={l.cantidad}
+                    onSumar={() => cambiarLinea(l.id, 1)}
+                    onRestar={() => cambiarLinea(l.id, -1)}
+                    nombre={l.nombre}
+                    chico
+                  />
+                </span>
+                <button
+                  type="button"
+                  className="rounded p-1.5 text-tinta-suave hover:bg-borde hover:text-rojo"
+                  onClick={() => setLineas((prev) => prev.filter((x) => x.id !== l.id))}
+                  aria-label={`Sacar ${l.nombre} del pedido`}
+                >
+                  <IconoBasura className="size-4" />
+                </button>
+              </span>
+            )}
           </li>
         ))}
         {nuevas.map((n) => {

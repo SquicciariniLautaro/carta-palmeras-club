@@ -58,7 +58,9 @@ export default function DetalleVenta({ venta, onCerrarModal, onEstado, onCobrar,
                       {!i.comida_id && <span className="ml-1 text-xs text-tinta-suave">(borrada)</span>}
                     </td>
                     <td className="py-2 text-right">{i.cantidad}</td>
-                    <td className="py-2 text-right">{formatearPesos(i.precio_unitario)}</td>
+                    <td className="py-2 text-right">
+                      {i.regalo ? <span className="text-xs font-semibold text-regalo">Regalo (vale {formatearPesos(i.precio_lista)})</span> : formatearPesos(i.precio_unitario)}
+                    </td>
                     <td className="py-2 text-right">{formatearPesos(i.subtotal)}</td>
                   </tr>
                 ))}

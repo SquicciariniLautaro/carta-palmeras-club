@@ -138,6 +138,13 @@ update public.ventas set cerrada_at = created_at where estado = 'cerrado' and ce
 alter table public.ventas add constraint ventas_estado_check
   check (estado in ('pendiente', 'en_preparacion', 'enviado', 'entregado', 'cerrado', 'cancelado'));
 
+-- Cuentas que pagan al final (mesas, barra): se van sumando cosas y se cobran
+-- al irse. Van al panel "Cuentas abiertas", no al tablero de pedidos (delivery / carta).
+alter table public.ventas add column if not exists es_cuenta boolean not null default false;
+-- Las ventas en caja que quedaron abiertas de antes pasan a ser cuentas
+update public.ventas set es_cuenta = true
+ where origen = 'manual' and turno in ('noche', 'mediodia') and estado <> 'cerrado' and not es_cuenta;
+
 create index if not exists ventas_created_at_idx on public.ventas (created_at desc);
 create index if not exists ventas_estado_idx on public.ventas (estado);
 create index if not exists ventas_turno_idx on public.ventas (turno, created_at desc);
@@ -154,6 +161,16 @@ create table if not exists public.venta_items (
 );
 
 alter table public.venta_items add column if not exists detalle text;
+
+-- Regalos (cortesías: la cerveza que va con la cancha, una vuelta de la casa…):
+-- no se cobran (precio 0) pero descuentan stock y quedan anotados con lo que
+-- valen en la carta (precio_lista, por unidad), para saber cuánto se regala.
+alter table public.venta_items add column if not exists regalo boolean not null default false;
+alter table public.venta_items add column if not exists precio_lista numeric(12,2);
+alter table public.venta_items drop constraint if exists venta_items_precio_lista_check;
+alter table public.venta_items add constraint venta_items_precio_lista_check check (precio_lista is null or precio_lista >= 0);
+alter table public.venta_items drop constraint if exists venta_items_regalo_check;
+alter table public.venta_items add constraint venta_items_regalo_check check (not regalo or (precio_unitario = 0 and subtotal = 0));
 
 create index if not exists venta_items_venta_idx on public.venta_items (venta_id);
 create index if not exists venta_items_comida_idx on public.venta_items (comida_id);
@@ -464,7 +481,8 @@ security definer
 set search_path = public
 as $$
 begin
-  if new.estado = 'cerrado' and old.estado <> 'cerrado'
+  -- Una cuenta en $ 0 (todo de regalo) se cierra sin cobro
+  if new.estado = 'cerrado' and old.estado <> 'cerrado' and new.total > 0
      and not exists (select 1 from public.pagos where venta_id = new.id) then
     raise exception 'Para cerrar la cuenta registrá el cobro (efectivo, transferencia o cuenta corriente).';
   end if;
@@ -589,6 +607,10 @@ as $$
 declare
   v_web boolean;
 begin
+  -- Al juntar dos líneas iguales de una cuenta (_sumar_items) el stock ya se movió
+  if current_setting('palmeras.sin_stock', true) = 'si' then
+    return null;
+  end if;
   if tg_op = 'DELETE' then
     perform public._ajustar_stock(old.comida_id, old.cantidad, false, old.venta_id);
     return old;
@@ -621,7 +643,7 @@ declare
 begin
   if tg_op = 'DELETE' then
     if old.venta_id is not null then
-      raise exception 'Este turno ya está cobrado o señado. Para borrarlo, primero anulá el cobro.';
+      raise exception 'Este turno ya está cobrado o señado, o tiene consumos anotados. Para borrarlo, primero anulá el cobro o sacá los consumos de su cuenta.';
     end if;
     -- Turno fijo: se libera solo ese día (no se vuelve a anotar)
     if old.fijo_id is not null then
@@ -631,7 +653,7 @@ begin
   end if;
 
   if tg_op = 'UPDATE' and old.venta_id is not null and new.venta_id is not null and new.precio <> old.precio then
-    raise exception 'Este turno ya está cobrado. Para cambiarle el precio, primero anulá el cobro.';
+    raise exception 'Este turno ya tiene su cuenta (cobro, seña o consumos). Para cambiarle el precio, primero anulá el cobro o sacá los consumos.';
   end if;
 
   select * into t
@@ -685,7 +707,7 @@ declare
 begin
   select * into v from public.ventas where id = p_venta_id;
   perform public._registrar('venta',
-    case when v.origen = 'web' then 'Pedido web' else 'Venta en caja' end,
+    case when v.origen = 'web' then 'Pedido web' when v.es_cuenta then 'Abrió una cuenta' else 'Venta en caja' end,
     '#' || v.numero || coalesce(' · ' || v.cliente_nombre, '') || ' · ' || initcap(v.turno), v.total);
 end;
 $$;
@@ -965,8 +987,12 @@ begin
     raise exception 'De una venta solo podés cambiar el estado.';
   end if;
   if (tg_op = 'DELETE' or new.estado = 'cancelado')
-     and exists (select 1 from public.pagos p where p.venta_id = v_id) then
+     and (old.estado = 'cerrado' or exists (select 1 from public.pagos p where p.venta_id = v_id)) then
     raise exception 'Esta venta ya tiene un cobro: solo el dueño puede borrarla o cancelarla.';
+  end if;
+  -- Una venta cerrada (también una de regalos, sin cobro) la reabre solo el dueño
+  if tg_op = 'UPDATE' and old.estado = 'cerrado' and new.estado <> 'cerrado' then
+    raise exception 'Esta venta ya está cerrada: solo el dueño puede reabrirla.';
   end if;
   return coalesce(new, old);
 end;
@@ -1172,6 +1198,8 @@ drop function if exists public.registrar_venta_manual(jsonb, text, text);
 --             "aclaracion": "bien cocida" }, ...]
 -- Solo comida_id y cantidad son obligatorios. Cada combinación distinta
 -- (por ejemplo una doble sin cebolla) es una línea aparte.
+-- "regalo": true = cortesía (solo desde el panel): va a $ 0, descuenta stock y
+-- guarda en precio_lista lo que vale en la carta. Queda en Actividad.
 -- p_solo_activas = pedido web: solo comidas activas de la carta (turno noche).
 create or replace function public._agregar_items(
   p_venta_id uuid,
@@ -1193,6 +1221,8 @@ declare
   v_quitar   text[];
   v_agregar  text[];
   v_partes   text[];
+  v_regalo   boolean;
+  v_numero   bigint;
 begin
   if p_items is null or jsonb_typeof(p_items) <> 'array' then
     raise exception 'El formato del pedido no es válido.';
@@ -1207,9 +1237,10 @@ begin
              nullif(btrim(x.variante), '') as variante,
              coalesce(x.quitar, '[]'::jsonb) as quitar,
              coalesce(x.agregar, '[]'::jsonb) as agregar,
-             nullif(btrim(x.aclaracion), '') as aclaracion
+             nullif(btrim(x.aclaracion), '') as aclaracion,
+             coalesce(x.regalo, false) as regalo
       from jsonb_to_recordset(p_items)
-           as x (comida_id uuid, cantidad int, variante text, quitar jsonb, agregar jsonb, aclaracion text)
+           as x (comida_id uuid, cantidad int, variante text, quitar jsonb, agregar jsonb, aclaracion text, regalo boolean)
     loop
       if r.comida_id is null or r.cantidad is null or r.cantidad <= 0 then
         raise exception 'Hay un producto con datos inválidos en el pedido.';
@@ -1224,6 +1255,11 @@ begin
       if r.aclaracion is not null and length(r.aclaracion) > 80 then
         raise exception 'La aclaración es demasiado larga (máximo 80 caracteres).';
       end if;
+      -- Los regalos los anota solo el local (nunca un pedido de la carta online)
+      if r.regalo and p_solo_activas then
+        raise exception 'Hay un producto con datos inválidos en el pedido.';
+      end if;
+      v_regalo := r.regalo;
 
       select * into c from public.comidas where id = r.comida_id;
       if not found or (p_solo_activas and (not c.activo or c.turno <> 'noche')) then
@@ -1231,7 +1267,7 @@ begin
       end if;
 
       v_precio  := coalesce(c.precio_promo, c.precio);   -- el precio sale de la base, nunca del cliente
-      v_partes  := '{}';
+      v_partes  := case when v_regalo then '{Regalo}'::text[] else '{}'::text[] end;
       v_quitar  := '{}';
       v_agregar := '{}';
 
@@ -1289,9 +1325,17 @@ begin
         v_partes := v_partes || ('"' || r.aclaracion || '"');
       end if;
 
-      insert into public.venta_items (venta_id, comida_id, nombre, detalle, precio_unitario, cantidad, subtotal)
+      insert into public.venta_items (venta_id, comida_id, nombre, detalle, precio_unitario, cantidad, subtotal, regalo, precio_lista)
       values (p_venta_id, c.id, c.nombre, nullif(array_to_string(v_partes, ' · '), ''),
-              v_precio, r.cantidad, v_precio * r.cantidad);
+              case when v_regalo then 0 else v_precio end, r.cantidad,
+              case when v_regalo then 0 else v_precio * r.cantidad end, v_regalo, v_precio);
+
+      if v_regalo then
+        select v.numero into v_numero from public.ventas v where v.id = p_venta_id;
+        perform public._registrar('venta', 'Anotó un regalo',
+          '#' || v_numero || ' · ' || r.cantidad || 'x ' || c.nombre || coalesce(' (' || r.aclaracion || ')', ''),
+          v_precio * r.cantidad);
+      end if;
     end loop;
   exception
     when invalid_text_representation or numeric_value_out_of_range then
@@ -1311,7 +1355,18 @@ declare
   v_lineas   int;
   v_unidades int;
   v_total    numeric(12,2);
+  v_web      boolean;
+  -- Pedido web: límites del carrito. En el local (cuentas de mesa, barra o
+  -- cancha que se llenan durante horas) los límites son más amplios.
+  v_max_lineas   int;
+  v_max_unidades int;
+  v_max_producto int;
 begin
+  select v.origen = 'web' into v_web from public.ventas v where v.id = p_venta_id;
+  v_max_lineas   := case when v_web then 30 else 100 end;
+  v_max_unidades := case when v_web then 100 else 500 end;
+  v_max_producto := case when v_web then 50 else 200 end;
+
   select count(*), coalesce(sum(cantidad), 0), coalesce(sum(subtotal), 0)
     into v_lineas, v_unidades, v_total
     from public.venta_items
@@ -1320,17 +1375,17 @@ begin
   if v_lineas = 0 then
     raise exception 'El pedido está vacío.';
   end if;
-  if v_lineas > 30 then
-    raise exception 'El pedido tiene demasiados productos (máximo 30 distintos).';
+  if v_lineas > v_max_lineas then
+    raise exception 'El pedido tiene demasiados productos (máximo % distintos).', v_max_lineas;
   end if;
-  if v_unidades > 100 then
-    raise exception 'El pedido supera el máximo de 100 unidades.';
+  if v_unidades > v_max_unidades then
+    raise exception 'El pedido supera el máximo de % unidades.', v_max_unidades;
   end if;
   if exists (select 1 from public.venta_items
               where venta_id = p_venta_id
               group by comida_id
-             having sum(cantidad) > 50) then
-    raise exception 'Se pueden pedir hasta 50 unidades de cada producto.';
+             having sum(cantidad) > v_max_producto) then
+    raise exception 'Se pueden pedir hasta % unidades de cada producto.', v_max_producto;
   end if;
 
   update public.ventas set total = v_total where id = p_venta_id;
@@ -1470,13 +1525,19 @@ begin
   if v.estado = 'cerrado' then
     raise exception 'Esta cuenta ya está cobrada.';
   end if;
+  v_resta := v.total - (select coalesce(sum(p.monto), 0) from public.pagos p where p.venta_id = p_venta_id);
+
+  -- No queda nada por cobrar (todo de regalo, o ya se pagó con la seña): se cierra sin cobro
+  if v_resta = 0 and (p_pagos is null or jsonb_typeof(p_pagos) <> 'array' or jsonb_array_length(p_pagos) = 0) then
+    update public.ventas set estado = 'cerrado', cerrada_at = now() where id = p_venta_id;
+    return;
+  end if;
   if p_pagos is null or jsonb_typeof(p_pagos) <> 'array' or jsonb_array_length(p_pagos) = 0 then
     raise exception 'Indicá cómo se pagó.';
   end if;
   if jsonb_array_length(p_pagos) > 3 then
     raise exception 'Se pueden combinar hasta 3 formas de pago.';
   end if;
-  v_resta := v.total - (select coalesce(sum(p.monto), 0) from public.pagos p where p.venta_id = p_venta_id);
 
   begin
     for r in select x.metodo, x.monto, x.cliente_id
@@ -1681,8 +1742,10 @@ end;
 $$;
 
 -- Solo admin: venta en el local (caja), de la noche o del mediodía.
---   pagos = null  → queda como cuenta abierta (mesa) y se cobra después
+--   pagos = null  → queda como cuenta abierta (mesa, barra): va al panel
+--                   "Cuentas abiertas", se le van sumando cosas y se cobra al final
 --   pagos = [...] → se cobra en el momento (mismo formato que cobrar_venta)
+--   pagos = []    → solo si da $ 0 (todo de regalo): se cierra sin cobro
 -- Permite vender comidas inactivas (ocultas en el catálogo).
 create or replace function public.registrar_venta_local(
   items jsonb,
@@ -1704,12 +1767,15 @@ begin
   end if;
 
   v_id := public._crear_venta(registrar_venta_local.items, registrar_venta_local.cliente_nombre,
-                              registrar_venta_local.nota, 'manual', false, 'pendiente',
+                              registrar_venta_local.nota, 'manual', false,
+                              case when registrar_venta_local.pagos is null then 'entregado' else 'pendiente' end,
                               registrar_venta_local.turno, null);
+  if registrar_venta_local.pagos is null then
+    update public.ventas v set es_cuenta = true where v.id = v_id;
+  end if;
   perform public._registrar_venta(v_id);
 
-  if registrar_venta_local.pagos is not null and jsonb_typeof(registrar_venta_local.pagos) = 'array'
-     and jsonb_array_length(registrar_venta_local.pagos) > 0 then
+  if registrar_venta_local.pagos is not null then
     perform public._cobrar(v_id, registrar_venta_local.pagos);
   end if;
 
@@ -1759,6 +1825,9 @@ $$;
 --   items:  líneas que se conservan, con su cantidad: [{ "id": "<venta_item>", "cantidad": 2 }]
 --           (las que no vienen se borran; mantienen el precio con el que se pidieron)
 --   nuevos: líneas para sumar, mismo formato que crear_pedido (precio actual de la base)
+-- En la cuenta de un turno de cancha, el alquiler no se saca (se cambia desde el
+-- turno). Si se sacan todos los consumos y no hay seña, la cuenta se borra y el
+-- turno vuelve a quedar solo reservado.
 create or replace function public.editar_venta(
   venta_id uuid,
   items jsonb,
@@ -1779,12 +1848,16 @@ declare
   v_nota    text := nullif(btrim(coalesce(editar_venta.nota, '')), '');
   r         record;
   v_antes   public.ventas%rowtype;
+  v_max     int;
+  v_pagado  numeric(12,2);
+  v_total   numeric(12,2);
 begin
   if not public.es_admin() then
     raise exception 'No tenés permisos para hacer esto.';
   end if;
 
   select * into v_antes from public.ventas v where v.id = editar_venta.venta_id for update;
+  v_max := case when v_antes.origen = 'web' then 50 else 200 end;
   v_estado := v_antes.estado;
   if not found then
     raise exception 'El pedido no existe.';
@@ -1803,6 +1876,15 @@ begin
   end if;
 
   begin
+    -- El alquiler de la cancha queda como está
+    if v_antes.turno = 'cancha' and exists (
+         select 1 from public.venta_items vi
+          where vi.venta_id = editar_venta.venta_id and vi.comida_id is null
+            and not exists (select 1 from jsonb_to_recordset(v_items) as x (id uuid, cantidad int)
+                             where x.id = vi.id and x.cantidad = vi.cantidad)) then
+      raise exception 'El alquiler de la cancha no se saca ni se cambia desde la cuenta: cambialo desde el turno.';
+    end if;
+
     -- Borra las líneas que ya no están
     delete from public.venta_items vi
      where vi.venta_id = editar_venta.venta_id
@@ -1811,7 +1893,7 @@ begin
 
     -- Actualiza cantidades (el precio unitario queda como estaba)
     for r in select x.id, x.cantidad from jsonb_to_recordset(v_items) as x (id uuid, cantidad int) loop
-      if r.id is null or r.cantidad is null or r.cantidad <= 0 or r.cantidad > 50 then
+      if r.id is null or r.cantidad is null or r.cantidad <= 0 or r.cantidad > v_max then
         raise exception 'Hay un producto con una cantidad inválida.';
       end if;
       update public.venta_items vi
@@ -1834,10 +1916,27 @@ begin
    where v.id = editar_venta.venta_id;
 
   perform public._recalcular_venta(editar_venta.venta_id);
+  v_total  := (select v.total from public.ventas v where v.id = editar_venta.venta_id);
+  v_pagado := (select coalesce(sum(p.monto), 0) from public.pagos p where p.venta_id = editar_venta.venta_id);
+  if v_total < v_pagado then
+    raise exception 'La cuenta quedaría en % y ya se pagó % (seña): no puede quedar por debajo.',
+      public._pesos(v_total), public._pesos(v_pagado);
+  end if;
+
+  -- Cancha sin consumos ni seña: se borra la cuenta y el turno queda solo reservado
+  if v_antes.turno = 'cancha' and v_pagado = 0
+     and not exists (select 1 from public.venta_items vi where vi.venta_id = editar_venta.venta_id and vi.comida_id is not null) then
+    perform set_config('palmeras.automatico', 'si', true);
+    delete from public.ventas v where v.id = editar_venta.venta_id;
+    perform set_config('palmeras.automatico', '', true);
+    perform public._registrar('cancha', 'Sacó los consumos de un turno',
+      '#' || v_antes.numero || coalesce(' · ' || v_antes.cliente_nombre, '') || ' · total ' || public._pesos(v_antes.total)
+        || ' → ' || public._pesos(v_total), v_total);
+    return jsonb_build_object('numero', v_antes.numero, 'total', v_total);
+  end if;
+
   perform public._registrar('venta', 'Editó un pedido',
-    '#' || v_antes.numero || ' · total ' || public._pesos(v_antes.total) || ' → '
-      || public._pesos((select v.total from public.ventas v where v.id = editar_venta.venta_id)),
-    (select v.total from public.ventas v where v.id = editar_venta.venta_id));
+    '#' || v_antes.numero || ' · total ' || public._pesos(v_antes.total) || ' → ' || public._pesos(v_total), v_total);
 
   return (select jsonb_build_object('numero', v.numero, 'total', v.total)
           from public.ventas v where v.id = editar_venta.venta_id);
@@ -2050,8 +2149,10 @@ begin
 end;
 $$;
 
--- Solo admin: anula el cobro de un turno de la cancha (borra su venta y el
--- cobro sale de la caja). No se puede si el cobro ya está en un arqueo cerrado.
+-- Solo dueño: anula el cobro (o la seña) de un turno de la cancha: lo cobrado
+-- sale de la caja. Si la cuenta tiene consumos, quedan anotados y la cuenta
+-- vuelve a estar abierta; si era solo el alquiler, se borra y el turno queda
+-- reservado sin cobrar. No se puede si el cobro ya está en un arqueo cerrado.
 create or replace function public.anular_cobro_cancha(turno_id uuid)
 returns void
 language plpgsql
@@ -2059,16 +2160,24 @@ security definer
 set search_path = public
 as $$
 declare
-  v_venta uuid;
+  v public.ventas%rowtype;
 begin
   if not public.es_dueno() then
     raise exception 'Solo el dueño puede anular un cobro.';
   end if;
-  select c.venta_id into v_venta from public.cancha_turnos c where c.id = anular_cobro_cancha.turno_id for update;
-  if v_venta is null then
-    raise exception 'Este turno no está cobrado.';
+  select x.* into v
+    from public.cancha_turnos c join public.ventas x on x.id = c.venta_id
+   where c.id = anular_cobro_cancha.turno_id
+     for update of c;
+  if not found or (v.estado <> 'cerrado' and not exists (select 1 from public.pagos p where p.venta_id = v.id)) then
+    raise exception 'Este turno no está cobrado ni señado.';
   end if;
-  delete from public.ventas v where v.id = v_venta;   -- el turno queda sin cobrar (on delete set null)
+  if exists (select 1 from public.venta_items i where i.venta_id = v.id and i.comida_id is not null) then
+    delete from public.pagos p where p.venta_id = v.id;
+    update public.ventas x set estado = 'entregado', cerrada_at = null where x.id = v.id;
+  else
+    delete from public.ventas x where x.id = v.id;   -- el turno queda sin cobrar (on delete set null)
+  end if;
 end;
 $$;
 
@@ -2103,6 +2212,123 @@ begin
 end;
 $$;
 
+-- Suma productos a una cuenta que todavía no se cobró (mismo formato que
+-- crear_pedido, con "regalo" para las cortesías). Si ya hay una línea igual
+-- (mismo producto, opciones y precio), le suma la cantidad en vez de repetirla.
+create or replace function public._sumar_items(p_venta_id uuid, p_items jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_antes  uuid[];
+  v_nuevas uuid[];
+  r        record;
+begin
+  if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then
+    raise exception 'Agregá al menos un producto.';
+  end if;
+  v_antes := coalesce((select array_agg(i.id) from public.venta_items i where i.venta_id = p_venta_id), '{}');
+  perform public._agregar_items(p_venta_id, p_items, false);
+  v_nuevas := coalesce((select array_agg(i.id) from public.venta_items i
+                         where i.venta_id = p_venta_id and not (i.id = any (v_antes))), '{}');
+
+  -- El stock ya se descontó al agregar: juntar las líneas no lo vuelve a mover
+  perform set_config('palmeras.sin_stock', 'si', true);
+  for r in
+    select n.id as nueva, n.cantidad,
+           (select e.id from public.venta_items e
+             where e.venta_id = n.venta_id and e.id = any (v_antes)
+               and e.comida_id is not distinct from n.comida_id and e.nombre = n.nombre
+               and e.detalle is not distinct from n.detalle and e.precio_unitario = n.precio_unitario
+               and e.regalo = n.regalo
+             order by e.id limit 1) as vieja
+      from public.venta_items n
+     where n.id = any (v_nuevas)
+  loop
+    if r.vieja is not null then
+      update public.venta_items e
+         set cantidad = e.cantidad + r.cantidad, subtotal = e.precio_unitario * (e.cantidad + r.cantidad)
+       where e.id = r.vieja;
+      delete from public.venta_items e where e.id = r.nueva;
+    end if;
+  end loop;
+  perform set_config('palmeras.sin_stock', '', true);
+
+  perform public._recalcular_venta(p_venta_id);
+end;
+$$;
+
+-- Admin: suma productos (o regalos) a una cuenta abierta: mesa, barra o un
+-- pedido que todavía no se cobró.
+create or replace function public.sumar_a_cuenta(venta_id uuid, items jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v       public.ventas%rowtype;
+  v_total numeric(12,2);
+begin
+  if not public.es_admin() then
+    raise exception 'No tenés permisos para hacer esto.';
+  end if;
+  select * into v from public.ventas x where x.id = sumar_a_cuenta.venta_id for update;
+  if not found then
+    raise exception 'La cuenta no existe.';
+  end if;
+  if v.estado = 'cerrado' then
+    raise exception 'Esta cuenta ya está cobrada. Para sumarle algo, abrí otra cuenta.';
+  end if;
+
+  perform public._sumar_items(v.id, sumar_a_cuenta.items);
+  v_total := (select x.total from public.ventas x where x.id = v.id);
+  perform public._registrar('venta', 'Sumó a la cuenta',
+    '#' || v.numero || coalesce(' · ' || v.cliente_nombre, '') || ' · total ' || public._pesos(v.total) || ' → ' || public._pesos(v_total),
+    v_total);
+  return jsonb_build_object('id', v.id, 'numero', v.numero, 'total', v_total);
+end;
+$$;
+
+-- Admin: suma lo que consumen en la cancha (bebidas, comida, regalos) a la
+-- cuenta del turno, así se cobra todo junto con el alquiler.
+create or replace function public.sumar_a_turno_cancha(turno_id uuid, items jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  t       public.cancha_turnos%rowtype;
+  v_venta uuid;
+  v_antes numeric(12,2);
+  v       public.ventas%rowtype;
+begin
+  if not public.es_admin() then
+    raise exception 'No tenés permisos para hacer esto.';
+  end if;
+  select * into t from public.cancha_turnos c where c.id = sumar_a_turno_cancha.turno_id for update;
+  if not found then
+    raise exception 'El turno no existe.';
+  end if;
+  if exists (select 1 from public.ventas x where x.id = t.venta_id and x.estado = 'cerrado') then
+    raise exception 'Este turno ya está cobrado. Lo que consuman después, anotalo en una cuenta nueva.';
+  end if;
+
+  v_antes := coalesce((select x.total from public.ventas x where x.id = t.venta_id), t.precio);
+  v_venta := public._venta_de_turno(t.id);
+  perform public._sumar_items(v_venta, sumar_a_turno_cancha.items);
+  select * into v from public.ventas x where x.id = v_venta;
+  perform public._registrar('cancha', 'Sumó consumos al turno',
+    to_char(t.fecha, 'DD/MM') || ' ' || to_char(t.desde, 'HH24:MI') || ' · ' || t.cliente_nombre
+      || ' · total ' || public._pesos(v_antes) || ' → ' || public._pesos(v.total),
+    v.total);
+  return jsonb_build_object('id', v.id, 'numero', v.numero, 'total', v.total);
+end;
+$$;
+
 -- Admin: seña de un turno (parte del precio, en efectivo o transferencia).
 -- Entra en la caja abierta; al cobrar el turno se cobra solo lo que falta.
 create or replace function public.senar_turno_cancha(turno_id uuid, monto numeric, metodo text)
@@ -2115,6 +2341,7 @@ declare
   t        public.cancha_turnos%rowtype;
   v_venta  uuid;
   v_pagado numeric(12,2);
+  v_total  numeric(12,2);
   v_caja   uuid;
 begin
   if not public.es_admin() then
@@ -2134,9 +2361,11 @@ begin
     raise exception 'Este turno ya está cobrado.';
   end if;
   v_pagado := (select coalesce(sum(p.monto), 0) from public.pagos p where p.venta_id = t.venta_id);
-  if round(senar_turno_cancha.monto, 2) >= t.precio - v_pagado then
+  -- Lo que hay que pagar: el alquiler más lo que se consumió (si ya tiene cuenta)
+  v_total := coalesce((select v.total from public.ventas v where v.id = t.venta_id), t.precio);
+  if round(senar_turno_cancha.monto, 2) >= v_total - v_pagado then
     raise exception 'La seña tiene que ser menor que lo que falta pagar (%). Si paga todo, usá Cobrar.',
-      public._pesos(t.precio - v_pagado);
+      public._pesos(v_total - v_pagado);
   end if;
   v_caja := public._caja_abierta();
   if v_caja is null then
@@ -2148,7 +2377,7 @@ begin
   values (v_venta, v_caja, senar_turno_cancha.metodo, round(senar_turno_cancha.monto, 2), 'venta', 'Seña');
 
   return jsonb_build_object('pagado', v_pagado + round(senar_turno_cancha.monto, 2),
-                            'resta', t.precio - v_pagado - round(senar_turno_cancha.monto, 2));
+                            'resta', v_total - v_pagado - round(senar_turno_cancha.monto, 2));
 end;
 $$;
 
@@ -2168,6 +2397,12 @@ begin
   end if;
   select * into t from public.cancha_turnos c where c.id = cerrar_turno_con_sena.turno_id for update;
   if t.venta_id is null or exists (select 1 from public.ventas v where v.id = t.venta_id and v.estado = 'cerrado') then
+    raise exception 'Este turno no tiene una seña pendiente.';
+  end if;
+  if exists (select 1 from public.venta_items i where i.venta_id = t.venta_id and i.comida_id is not null) then
+    raise exception 'Este turno tiene consumos anotados en su cuenta: si no vino, sacalos antes de cerrarlo con la seña.';
+  end if;
+  if not exists (select 1 from public.pagos p where p.venta_id = t.venta_id) then
     raise exception 'Este turno no tiene una seña pendiente.';
   end if;
   v_pagado := (select coalesce(sum(p.monto), 0) from public.pagos p where p.venta_id = t.venta_id);
@@ -2490,6 +2725,11 @@ revoke execute on function public.cerrar_turno_con_sena(uuid) from public, anon;
 revoke execute on function public.preparar_turnos_fijos(date) from public, anon;
 revoke execute on function public.cargar_mercaderia(jsonb, text) from public, anon;
 revoke execute on function public.ajustar_stock(uuid, int, text) from public, anon;
+revoke execute on function public._sumar_items(uuid, jsonb) from public, anon, authenticated;
+revoke execute on function public.sumar_a_cuenta(uuid, jsonb) from public, anon;
+revoke execute on function public.sumar_a_turno_cancha(uuid, jsonb) from public, anon;
+grant execute on function public.sumar_a_cuenta(uuid, jsonb) to authenticated;
+grant execute on function public.sumar_a_turno_cancha(uuid, jsonb) to authenticated;
 grant execute on function public.senar_turno_cancha(uuid, numeric, text) to authenticated;
 grant execute on function public.cerrar_turno_con_sena(uuid) to authenticated;
 grant execute on function public.preparar_turnos_fijos(date) to authenticated;

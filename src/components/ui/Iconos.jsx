@@ -252,3 +252,18 @@ export const IconoPelota = (p) => (
     <path d="M12 3v4.5M20.6 9.4l-4.3 1.2M17.3 19.3l-2.6-3.7M6.7 19.3l2.6-3.7M3.4 9.4l4.3 1.2" />
   </Svg>
 );
+export const IconoVaso = (p) => (
+  <Svg {...p}>
+    <path d="M5 8h10v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8z" />
+    <path d="M15 11h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-2" />
+    <path d="M5 8a3 3 0 0 1 3-3 3 3 0 0 1 4-1 3 3 0 0 1 3 4" />
+    <path d="M9 12v5M11.5 12v5" />
+  </Svg>
+);
+export const IconoRegalo = (p) => (
+  <Svg {...p}>
+    <rect x="3" y="8" width="18" height="4" rx="1" />
+    <path d="M5 12v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8M12 8v13" />
+    <path d="M12 8S10.5 3.5 8 4.2C6 4.8 6.6 8 12 8zM12 8s1.5-4.5 4-3.8c2 .6 1.4 3.8-4 3.8z" />
+  </Svg>
+);

@@ -8,12 +8,18 @@ import SubirImagen from "./SubirImagen";
 import { opcionesIniciales, validarOpciones } from "../../lib/opcionesForm";
 import OpcionesComida from "./OpcionesComida";
 
-function valoresIniciales(comida, categorias) {
+// Precio con el que arranca un plato nuevo del mediodía (casi todos salen eso)
+const PRECIO_MEDIODIA = 7500;
+
+function valoresIniciales(comida, categorias, turno) {
+  const deCocina = turno === "mediodia" ? categorias.find((c) => !c.controla_stock) : null;
+  const categoria = comida?.categoria_id ?? deCocina?.id ?? categorias[0]?.id ?? "";
+  const sugerido = !comida && turno === "mediodia" && !categorias.find((c) => c.id === categoria)?.controla_stock ? String(PRECIO_MEDIODIA) : "";
   return {
     nombre: comida?.nombre ?? "",
     descripcion: comida?.descripcion ?? "",
-    categoria_id: comida?.categoria_id ?? categorias[0]?.id ?? "",
-    precio: comida?.precio != null ? String(Number(comida.precio)) : "",
+    categoria_id: categoria,
+    precio: comida?.precio != null ? String(Number(comida.precio)) : sugerido,
     precio_promo: comida?.precio_promo != null ? String(Number(comida.precio_promo)) : "",
     destacado: comida?.destacado ?? false,
     // Si todavía no tiene precio, al ponérselo queda disponible
@@ -61,7 +67,7 @@ function validar(v, conStock) {
 
 export default function FormComida({ comida, categorias, turno = "noche", onCerrar, onGuardado }) {
   const conCarta = turno === "noche";
-  const [v, setV] = useState(() => valoresIniciales(comida, categorias));
+  const [v, setV] = useState(() => valoresIniciales(comida, categorias, turno));
   const [errores, setErrores] = useState({});
   const [archivo, setArchivo] = useState(null); // imagen nueva elegida
   const [quitarImagen, setQuitarImagen] = useState(false);

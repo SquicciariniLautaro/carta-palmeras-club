@@ -4,8 +4,8 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { supabase, mensajeDeError } from "../../lib/supabase";
 import { cantidad, claveDia, fechaInput, formatearPesos, formatearPorcentaje } from "../../lib/formato";
 import { descargarExcel } from "../../lib/excel";
-import { hojaArqueos, hojaCobros, hojaCuentas, hojaGastos, hojaProductos, hojaVentas } from "../../lib/reportes";
-import { IconoAlerta, IconoExcel } from "../ui/Iconos";
+import { hojaArqueos, hojaCobros, hojaCuentas, hojaGastos, hojaProductos, hojaRegalos, hojaVentas } from "../../lib/reportes";
+import { IconoAlerta, IconoExcel, IconoRegalo } from "../ui/Iconos";
 import Cargando from "../ui/Cargando";
 import { RANGOS_MES, calcularRango, hoyInput, sufijoArchivo, textoPeriodo } from "./ventasUtils";
 
@@ -20,7 +20,7 @@ const formatoCorto = new Intl.NumberFormat("es-AR", { style: "currency", currenc
 async function obtenerFinanzas({ desde, hasta }) {
   const desdeIso = desde.toISOString();
   const hastaIso = hasta.toISOString();
-  const [ventas, pagos, gastos, pendientes, clientes, cajas] = await Promise.all([
+  const [ventas, pagos, gastos, pendientes, clientes, cajas, regalos] = await Promise.all([
     supabase
       .from("ventas")
       .select("*, venta_items(*), pagos(metodo, monto)")
@@ -40,6 +40,14 @@ async function obtenerFinanzas({ desde, hasta }) {
     supabase.from("gastos").select("monto, vencimiento").eq("estado", "pendiente"),
     supabase.from("clientes_saldos").select("*").order("nombre"),
     supabase.from("cajas").select("*").eq("estado", "cerrada").gte("abierta_at", desdeIso).lt("abierta_at", hastaIso).order("abierta_at"),
+    // Regalos (cortesías) del período, cobrada o no la cuenta
+    supabase
+      .from("venta_items")
+      .select("id, nombre, detalle, cantidad, precio_lista, ventas!inner(numero, created_at, turno, cliente_nombre)")
+      .eq("regalo", true)
+      .gte("ventas.created_at", desdeIso)
+      .lt("ventas.created_at", hastaIso)
+      .limit(20000),
   ]);
   const error = [ventas, pagos, gastos, pendientes, clientes, cajas].find((r) => r.error)?.error;
   if (error) throw error;
@@ -50,6 +58,8 @@ async function obtenerFinanzas({ desde, hasta }) {
     pendientes: pendientes.data,
     clientes: clientes.data,
     cajas: cajas.data,
+    // Si todavía no se corrió el SQL nuevo, los regalos no están: no frenamos el resto
+    regalos: regalos.error ? [] : [...regalos.data].sort((a, b) => a.ventas.created_at.localeCompare(b.ventas.created_at)),
   };
 }
 
@@ -72,6 +82,14 @@ function calcular(d) {
   const ganancia = ventas - gastos;
   const flujo = cobrado - gastosPagados;
   const libre = flujo - porPagar;
+  const regalado = d.regalos.reduce((acc, r) => acc + Number(r.precio_lista ?? 0) * r.cantidad, 0);
+  const porRegalo = new Map();
+  for (const r of d.regalos) {
+    const actual = porRegalo.get(r.nombre) ?? { nombre: r.nombre, unidades: 0, valor: 0 };
+    actual.unidades += r.cantidad;
+    actual.valor += Number(r.precio_lista ?? 0) * r.cantidad;
+    porRegalo.set(r.nombre, actual);
+  }
   const porCategoria = new Map();
   for (const g of d.gastos) porCategoria.set(g.categoria, (porCategoria.get(g.categoria) ?? 0) + Number(g.monto));
   return {
@@ -96,6 +114,9 @@ function calcular(d) {
     flujo,
     libre,
     categorias: [...porCategoria.entries()].sort((a, b) => b[1] - a[1]),
+    regalado,
+    unidadesRegaladas: d.regalos.reduce((acc, r) => acc + r.cantidad, 0),
+    regalos: [...porRegalo.values()].sort((a, b) => b.valor - a.valor),
   };
 }
 
@@ -173,6 +194,11 @@ function hojaResumen(r, periodo) {
       { concepto: "   Costos variables", valor: r.gastosVariables },
       { concepto: "GANANCIA DEL PERÍODO", valor: r.ganancia, destacado: true, detalle: "Ventas − gastos" },
       { concepto: "Margen sobre ventas", valor: r.margen ?? 0, tipo: "porcentaje" },
+      {
+        concepto: "Regalos y cortesías (a precio de carta)",
+        valor: r.regalado,
+        detalle: `${cantidad(r.unidadesRegaladas, "unidad", "unidades")} sin cobrar. Informativo: la mercadería ya está en los gastos`,
+      },
       { seccion: "Dinero (percibido)" },
       { concepto: "Cobrado en efectivo", valor: r.cobradoEfectivo, detalle: "Ventas y pagos de cuentas corrientes" },
       { concepto: "Cobrado por transferencia", valor: r.cobradoTransferencia },
@@ -224,6 +250,7 @@ export default function Finanzas() {
         hojaResumen(r, periodo),
         hojaVentas(datos.ventas, sub),
         hojaProductos(datos.ventas, sub),
+        hojaRegalos(datos.regalos, sub),
         hojaCobros(datos.pagos, sub),
         hojaGastos(datos.gastos, sub),
         hojaArqueos(datos.cajas, sub),
@@ -410,6 +437,37 @@ export default function Finanzas() {
             ) : (
               <p className="grid h-40 place-items-center text-sm text-tinta-suave">Sin cobros ni gastos en este período.</p>
             )}
+          </div>
+
+          <div className="tarjeta p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="flex items-center gap-2 text-sm font-semibold">
+                  <IconoRegalo className="size-4 text-regalo" /> Regalos y cortesías
+                </h2>
+                <p className="cifras mt-1 text-2xl font-bold text-regalo">{formatearPesos(r.regalado)}</p>
+                <p className="text-xs text-tinta-suave">
+                  {cantidad(r.unidadesRegaladas, "unidad regalada", "unidades regaladas")} en el período, a precio de carta (lo que se dejó de cobrar)
+                  {r.ventas > 0 && r.regalado > 0 && ` · ${formatearPorcentaje(r.regalado / r.ventas)} de lo vendido`}
+                </p>
+              </div>
+              {r.regalos.length > 0 && (
+                <ul className="cifras min-w-56 flex-1 space-y-1 text-sm sm:max-w-md">
+                  {r.regalos.slice(0, 5).map((x) => (
+                    <li key={x.nombre} className="flex justify-between gap-2">
+                      <span className="truncate">
+                        <strong>{x.unidades}x</strong> {x.nombre}
+                      </span>
+                      <span className="shrink-0">{formatearPesos(x.valor)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <p className="mt-2 text-xs text-tinta-suave">
+              Se anotan desde Cuentas abiertas o Cancha (botón Regalo) y descuentan el stock. No se restan otra vez de la ganancia: lo que costó la
+              mercadería ya está en Gastos. El detalle está en el Excel, hoja Regalos.
+            </p>
           </div>
 
           <div className="grid gap-3 lg:grid-cols-2">
