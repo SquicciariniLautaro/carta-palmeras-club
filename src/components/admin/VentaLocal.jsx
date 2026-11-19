@@ -66,6 +66,7 @@ function Contenido({ turno, comidas, kiosco, menuHoy, onCerrar, onRegistrada }) 
 
   async function registrar() {
     if (lineas.length === 0) return toast.error("Agregá al menos un producto.");
+    if (modo === "abierta" && !cliente.trim()) return toast.error("Poné la mesa o el nombre, así encontrás la cuenta en Cuentas abiertas.");
     let pagos = null;
     if (modo === "cobrar") {
       const validacion = validarPago(pago, total);
@@ -96,7 +97,7 @@ function Contenido({ turno, comidas, kiosco, menuHoy, onCerrar, onRegistrada }) 
     toast.success(
       modo === "cobrar"
         ? `Venta #${data.numero} cobrada: ${formatearPesos(data.total)}`
-        : `Cuenta #${data.numero} abierta. La cobrás desde el tablero.`
+        : `Cuenta #${data.numero} abierta. Está en "Cuentas abiertas": ahí le sumás lo que pidan y la cobrás al final.`
     );
     onRegistrada();
   }
@@ -208,7 +209,7 @@ function Contenido({ turno, comidas, kiosco, menuHoy, onCerrar, onRegistrada }) 
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label>
-          <span className="etiqueta">Cliente o mesa (opcional)</span>
+          <span className="etiqueta">Cliente o mesa {modo === "abierta" ? "*" : "(opcional)"}</span>
           <input className="campo" maxLength={80} placeholder="Ej.: Mesa 4" value={cliente} onChange={(e) => setCliente(e.target.value)} />
         </label>
         <label>
@@ -239,7 +240,8 @@ function Contenido({ turno, comidas, kiosco, menuHoy, onCerrar, onRegistrada }) 
         <FormPagos total={total} valor={pago} onCambio={setPago} clientes={clientes} onClienteCreado={recargarClientes} />
       ) : (
         <p className="rounded-xl bg-fondo p-3 text-xs text-tinta-suave">
-          La cuenta queda en el tablero de pedidos. Podés sumarle productos y cerrarla cuando el cliente pague.
+          La cuenta queda en la sección "Cuentas abiertas" (aparte de los pedidos de delivery): ahí le sumás lo que pidan y la cobrás cuando
+          paguen.
         </p>
       )}
 

@@ -23,7 +23,7 @@ export function usePedidosEnVivo(onNuevo) {
   const revisar = useCallback((forzar = false) => {
     return supabase
       .from("ventas")
-      .select("id, numero, estado, cliente_nombre, total, origen, turno, created_at")
+      .select("id, numero, estado, cliente_nombre, total, origen, turno, es_cuenta, created_at")
       .in("estado", ESTADOS_ABIERTOS)
       .order("created_at", { ascending: true })
       .then(({ data, error }) => {

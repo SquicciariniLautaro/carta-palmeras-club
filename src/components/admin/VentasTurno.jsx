@@ -52,13 +52,15 @@ async function obtenerVentas(turno, { desde, hasta }) {
   return data;
 }
 
-// Pedidos sin cobrar de cualquier fecha (así no se pierde ninguno de días anteriores)
+// Pedidos sin cobrar de cualquier fecha (así no se pierde ninguno de días anteriores).
+// Las cuentas que pagan al final (mesas, barra) tienen su propio panel.
 async function obtenerAbiertos(turno) {
   const { data, error } = await supabase
     .from("ventas")
     .select(COLUMNAS_VENTA)
     .eq("turno", turno)
     .in("estado", ESTADOS_ABIERTOS)
+    .eq("es_cuenta", false) // las cuentas de mesa o barra van en Cuentas abiertas
     .order("created_at", { ascending: true })
     .limit(LIMITE_ABIERTOS);
   if (error) throw error;

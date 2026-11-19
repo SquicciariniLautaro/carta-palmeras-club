@@ -109,12 +109,12 @@ await prueba("en el local se puede vender de más (queda negativo)", async () =>
 
 // ---------------------------------------------------------------------------
 console.log("\nPermisos del empleado en productos y ventas");
-await rechaza("no cambia precios", () => como(EMPLEADO, () => q("update comidas set precio = 1 where id = $1", [COCA])), "solo el dueño");
+await prueba("sí cambia precios (y queda en la actividad)", () => como(EMPLEADO, () => q("update comidas set precio = 3100 where id = $1", [COCA])));
 await prueba("sí marca que no hay", () => como(EMPLEADO, () => q("update comidas set activo = false where id = $1", [BURGUER])));
 await prueba("…y vuelve a marcar que hay", () => como(EMPLEADO, () => q("update comidas set activo = true where id = $1", [BURGUER])));
-await rechaza("no crea productos", () =>
-  como(EMPLEADO, () => q("insert into comidas (nombre, precio, categoria_id) select 'X', 10, categoria_id from comidas where id = $1", [COCA])), "solo el dueño");
-await rechaza("no borra productos", () => como(EMPLEADO, () => q("delete from comidas where id = $1", [COCA])), "solo el dueño");
+await prueba("sí crea productos", () =>
+  como(EMPLEADO, () => q("insert into comidas (nombre, precio, categoria_id) select 'Producto del empleado', 10, categoria_id from comidas where id = $1", [COCA])));
+await rechaza("no borra productos", () => como(EMPLEADO, () => q("delete from comidas where nombre = 'Producto del empleado'")), "solo el dueño");
 await rechaza("no toca categorías", () => como(EMPLEADO, () => q("update categorias set nombre = 'X' where nombre = 'Bebidas'")), "solo el dueño");
 await rechaza("no toca horarios", () => como(EMPLEADO, () => q("update horarios set abierto = false")), "solo el dueño");
 await rechaza("no arma el menú del día", () =>
@@ -275,28 +275,128 @@ await prueba("el dueño ve quién hizo cada cosa", async () => {
 });
 
 // ---------------------------------------------------------------------------
-console.log("\nPlatos del mediodía sin precio");
+console.log("\nPlatos del mediodía");
 const POLLO_LIMON = await id("Pollo al limón");
-await prueba("se cargan los 44 platos en 5 categorías, sin precio y no disponibles", async () => {
-  const filas = await q(`select c.nombre, count(*)::int as n, bool_and(m.precio is null and not m.activo and m.turno = 'mediodia') as ok
+await prueba("los 44 platos en 5 categorías quedan a $ 7.500 y disponibles", async () => {
+  const filas = await q(`select c.nombre, count(*)::int as n, bool_and(m.precio = 7500 and m.activo and m.turno = 'mediodia') as ok
                            from comidas m join categorias c on c.id = m.categoria_id
-                          where c.turno = 'mediodia' group by c.nombre`);
+                          where c.turno = 'mediodia' and not c.controla_stock group by c.nombre`);
   const por = Object.fromEntries(filas.map((f) => [f.nombre, f.n]));
   igual(J(por), J({ ...por, Pollo: 10, Carnes: 12, "Guisos y estofados": 5, Pastas: 9, "Al horno y rellenos": 8 }), "platos por categoría");
-  igual(filas.every((f) => f.ok), true, "sin precio y no disponibles");
+  igual(filas.every((f) => f.ok), true, "a $ 7.500 y disponibles");
 });
-await prueba("la carga no anota 44 líneas en la actividad", async () => {
-  igual((await uno("select count(*)::int as n from actividad where accion = 'Creó un producto' and detalle in (select nombre from comidas where turno = 'mediodia')")).n, 0, "líneas");
+await prueba("la carga y el cambio de precio no anotan una línea por plato en la actividad", async () => {
+  igual((await uno("select count(*)::int as n from actividad where accion in ('Creó un producto', 'Cambió el precio') and detalle like 'Pollo al limón%'")).n, 0, "líneas");
+  igual((await uno("select count(*)::int as n from actividad where accion = 'Puso $ 7.500 a los platos del mediodía'")).n, 1, "una sola vez");
+});
+await prueba("volver a correr la actualización no pisa los precios", async () => {
+  await como(DUENO, () => q("update comidas set precio = 9000 where id = $1", [POLLO_LIMON]));
+  const archivo = actualizaciones().find((a) => a.includes("cuentas-cancha-regalos"));
+  await db.exec(leerSql(archivo));
+  igual(Number((await uno("select precio from comidas where id = $1", [POLLO_LIMON])).precio), 9000, "precio");
+  igual((await uno("select detalle from actividad where accion = 'Cambió el precio' order by id desc limit 1")).detalle, "Pollo al limón · $ 7500.00 → $ 9000.00", "actividad");
+});
+let SIN_PRECIO;
+await prueba("un plato nuevo se puede cargar sin precio (no disponible)", async () => {
+  SIN_PRECIO = (await como(DUENO, () =>
+    uno("insert into comidas (nombre, precio, activo, categoria_id) select 'Plato a definir', null, false, categoria_id from comidas where id = $1 returning id", [POLLO_LIMON]))).id;
 });
 await rechaza("el empleado no lo puede marcar disponible sin precio", () =>
-  como(EMPLEADO, () => q("update comidas set activo = true where id = $1", [POLLO_LIMON])), "comidas_precio_activo_check");
+  como(EMPLEADO, () => q("update comidas set activo = true where id = $1", [SIN_PRECIO])), "comidas_precio_activo_check");
 await rechaza("no se puede vender sin precio", () =>
-  como(EMPLEADO, () => uno("select registrar_venta_local($1::jsonb, 'mediodia', null, null, null) as r", [J([{ comida_id: POLLO_LIMON, cantidad: 1 }])])), "precio_unitario");
-await prueba("el dueño le pone precio y queda disponible", async () => {
-  await como(DUENO, () => q("update comidas set precio = 9000, activo = true where id = $1", [POLLO_LIMON]));
-  const r = await como(EMPLEADO, () => uno("select registrar_venta_local($1::jsonb, 'mediodia', null, null, null) as r", [J([{ comida_id: POLLO_LIMON, cantidad: 2 }])]));
-  igual(Number((await uno("select total from ventas where id = $1", [r.r.id ?? r.r])).total), 18000, "total");
-  igual((await uno("select detalle from actividad where accion = 'Cambió el precio' order by id desc limit 1")).detalle, "Pollo al limón · sin precio → $ 9000.00", "actividad");
+  como(EMPLEADO, () => uno("select registrar_venta_local($1::jsonb, 'mediodia', null, null, null) as r", [J([{ comida_id: SIN_PRECIO, cantidad: 1 }])])), "precio_unitario");
+
+// ---------------------------------------------------------------------------
+console.log("\nCuentas abiertas (mesas y barra) y regalos");
+const totalDe = async (venta) => Number((await uno("select total from ventas where id = $1", [venta])).total);
+const lineas = (venta) => q("select nombre, cantidad, precio_unitario::float as precio, subtotal::float as subtotal, regalo, precio_lista::float as lista, detalle from venta_items where venta_id = $1 order by nombre, regalo", [venta]);
+let mesa;
+await prueba("una venta en caja sin cobrar queda como cuenta abierta (fuera del tablero)", async () => {
+  mesa = (await como(EMPLEADO, () => uno("select registrar_venta_local($1::jsonb, 'noche', 'Mesa 4', null, null) as r", [J([{ comida_id: COCA, cantidad: 2 }])]))).r;
+  const v = await uno("select es_cuenta, estado from ventas where id = $1", [mesa.id]);
+  igual(`${v.es_cuenta} ${v.estado}`, "true entregado", "cuenta");
+});
+await prueba("sumar a la cuenta junta las líneas iguales y descuenta el stock una vez", async () => {
+  const antes = await stock(COCA);
+  await como(EMPLEADO, () => q("select sumar_a_cuenta($1, $2::jsonb)", [mesa.id, J([{ comida_id: COCA, cantidad: 3 }, { comida_id: BURGUER, cantidad: 1 }])]));
+  igual(await stock(COCA), antes - 3, "stock");
+  const l = await lineas(mesa.id);
+  igual(l.filter((x) => x.nombre === "Coca-Cola 500 ml").map((x) => x.cantidad).join(","), "5", "una sola línea de coca");
+  igual(await totalDe(mesa.id), 5 * 3200 + 7500, "total");
+  igual((await q("select cantidad from stock_movimientos where comida_id = $1 order by id desc limit 1", [COCA]))[0].cantidad, -3, "un solo movimiento");
+});
+await prueba("un regalo va a $ 0, descuenta stock y guarda lo que vale", async () => {
+  const antes = await stock(COCA);
+  await como(EMPLEADO, () => q("select sumar_a_cuenta($1, $2::jsonb)", [mesa.id, J([{ comida_id: COCA, cantidad: 1, regalo: true, aclaracion: "de la casa" }])]));
+  igual(await stock(COCA), antes - 1, "stock");
+  const r = (await lineas(mesa.id)).find((x) => x.regalo);
+  igual(`${r.precio} ${r.subtotal} ${r.lista} ${r.detalle}`, `0 0 3200 Regalo · "de la casa"`, "línea");
+  igual(await totalDe(mesa.id), 5 * 3200 + 7500, "el total no cambia");
+  const a = await uno("select usuario, detalle, monto from actividad where accion = 'Anotó un regalo' order by id desc limit 1");
+  igual(`${a.usuario} ${Number(a.monto)}`, `${EMPLEADO.email} 3200`, "actividad");
+});
+await rechaza("la carta online no puede pedir regalos", () =>
+  anonimo(() => q("select crear_pedido($1::jsonb, 'Ana', null, '3884131570')", [J([{ comida_id: COCA, cantidad: 1, regalo: true }])])), "datos inválidos");
+await prueba("se cobra la cuenta y deja de estar abierta", async () => {
+  await como(EMPLEADO, () => q("select cobrar_venta($1, $2::jsonb)", [mesa.id, J(EFECTIVO)]));
+  igual((await uno("select estado from ventas where id = $1", [mesa.id])).estado, "cerrado", "estado");
+});
+await rechaza("a una cuenta cobrada no se le suma", () =>
+  como(EMPLEADO, () => q("select sumar_a_cuenta($1, $2::jsonb)", [mesa.id, J([{ comida_id: COCA, cantidad: 1 }])])), "ya está cobrada");
+let soloRegalo;
+await prueba("un regalo suelto (sin cuenta) se cierra en $ 0 sin cobro", async () => {
+  soloRegalo = (await como(EMPLEADO, () => uno("select registrar_venta_local($1::jsonb, 'noche', 'Regalo', null, '[]'::jsonb) as r", [J([{ comida_id: COCA, cantidad: 2, regalo: true }])]))).r;
+  igual(`${soloRegalo.estado} ${Number(soloRegalo.total)}`, "cerrado 0", "venta");
+});
+await rechaza("el empleado no borra un regalo ya cerrado", () => como(EMPLEADO, () => q("delete from ventas where id = $1", [soloRegalo.id])), "solo el dueño");
+await rechaza("…ni lo reabre", () => como(EMPLEADO, () => q("update ventas set estado = 'entregado' where id = $1", [soloRegalo.id])), "solo el dueño");
+await rechaza("una cuenta con algo para cobrar no se cierra sin cobro", () =>
+  como(EMPLEADO, () => uno("select registrar_venta_local($1::jsonb, 'noche', null, null, '[]'::jsonb) as r", [J([{ comida_id: COCA, cantidad: 1 }])])), "Indicá cómo se pagó");
+
+// ---------------------------------------------------------------------------
+console.log("\nCancha: consumos en la cuenta del turno");
+let tc;
+const ventaTurno = async (t) => (await uno("select venta_id from cancha_turnos where id = $1", [t])).venta_id;
+await prueba("se suman bebidas y una cerveza de regalo al turno", async () => {
+  tc = await reservar(EMPLEADO, "2030-02-01", "20:00", 60, 30000, "Los del viernes");
+  await como(EMPLEADO, () => q("select sumar_a_turno_cancha($1, $2::jsonb)", [tc, J([{ comida_id: AGUA, cantidad: 4 }, { comida_id: COCA, cantidad: 1, regalo: true, aclaracion: "con el alquiler" }])]));
+  const v = await ventaTurno(tc);
+  igual(await totalDe(v), 30000 + 4 * 2000, "alquiler + consumos");
+  igual((await lineas(v)).map((x) => `${x.cantidad}x ${x.nombre}${x.regalo ? " (regalo)" : ""}`).join(", "),
+    "4x Agua mineral 500 ml, 1x Alquiler de cancha, 1x Coca-Cola 500 ml (regalo)", "cuenta");
+});
+await rechaza("el alquiler no se saca desde la cuenta", async () => {
+  const v = await ventaTurno(tc);
+  const items = await q("select id, cantidad from venta_items where venta_id = $1 and comida_id is not null", [v]);
+  await como(EMPLEADO, () => q("select editar_venta($1, $2::jsonb)", [v, J(items)]));
+}, "alquiler de la cancha");
+await prueba("la seña tiene en cuenta los consumos", async () => {
+  const r = (await como(EMPLEADO, () => uno("select senar_turno_cancha($1, 10000, 'efectivo') as r", [tc]))).r;
+  igual(r.resta, 28000, "resta");
+});
+await rechaza("no se cierra con la seña si tiene consumos", () => como(DUENO, () => q("select cerrar_turno_con_sena($1)", [tc])), "consumos");
+await prueba("al cobrar se cobra todo junto (menos la seña)", async () => {
+  await como(EMPLEADO, () => q("select cobrar_turno_cancha($1, $2::jsonb)", [tc, J(EFECTIVO)]));
+  const pagos = await q("select monto::float as m from pagos where venta_id = $1 order by monto", [await ventaTurno(tc)]);
+  igual(pagos.map((p) => p.m).join(" + "), "10000 + 28000", "pagos");
+});
+await rechaza("a un turno cobrado no se le suman consumos", () =>
+  como(EMPLEADO, () => q("select sumar_a_turno_cancha($1, $2::jsonb)", [tc, J([{ comida_id: AGUA, cantidad: 1 }])])), "ya está cobrado");
+await prueba("anular el cobro deja la cuenta con sus consumos, abierta", async () => {
+  const v = await ventaTurno(tc);
+  await como(DUENO, () => q("select anular_cobro_cancha($1)", [tc]));
+  const x = await uno("select estado, total from ventas where id = $1", [v]);
+  igual(`${x.estado} ${Number(x.total)}`, "entregado 38000", "venta");
+  igual((await uno("select count(*)::int as n from pagos where venta_id = $1", [v])).n, 0, "pagos");
+});
+await prueba("sacar todos los consumos borra la cuenta y el turno queda reservado", async () => {
+  const v = await ventaTurno(tc);
+  const alquiler = await q("select id, cantidad from venta_items where venta_id = $1 and comida_id is null", [v]);
+  const agua = await stock(AGUA);
+  await como(EMPLEADO, () => q("select editar_venta($1, $2::jsonb)", [v, J(alquiler)]));
+  igual(await ventaTurno(tc), null, "venta del turno");
+  igual(await stock(AGUA), agua + 4, "el agua vuelve al stock");
+  await como(EMPLEADO, () => q("delete from cancha_turnos where id = $1", [tc]));
 });
 
 const { fallas, total } = resultado();

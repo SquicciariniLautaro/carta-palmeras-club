@@ -20,6 +20,7 @@ import {
   IconoPelota,
   IconoReloj,
   IconoSol,
+  IconoVaso,
 } from "../ui/Iconos";
 import CajaProvider from "./CajaProvider";
 import Turno from "./Turno";
@@ -29,6 +30,7 @@ import Gastos from "./Gastos";
 import Finanzas from "./Finanzas";
 import ConfigImpresora from "./ConfigImpresora";
 import Cancha from "./Cancha";
+import CuentasAbiertas from "./CuentasAbiertas";
 import Actividad from "./Actividad";
 import { conStockBajo, idsDeKiosco, necesitaCocina } from "./ventasUtils";
 
@@ -36,6 +38,7 @@ import { conStockBajo, idsDeKiosco, necesitaCocina } from "./ventasUtils";
 const SECCIONES = [
   { id: "noche", nombre: "Venta noche", Icono: IconoLuna },
   { id: "mediodia", nombre: "Venta mediodía", Icono: IconoSol },
+  { id: "cuentas_abiertas", nombre: "Cuentas abiertas", Icono: IconoVaso },
   { id: "cancha", nombre: "Cancha", Icono: IconoPelota },
   { id: "caja", nombre: "Caja", Icono: IconoCaja },
   { id: "cuentas", nombre: "Cuentas corrientes", Icono: IconoLibreta },
@@ -171,7 +174,9 @@ function PanelContenido({ sesion, rol }) {
   useEffect(() => {
     if (version > 0) recargar();
   }, [version, recargar]);
-  const enCurso = (turno) => abiertos.filter((p) => (p.turno ?? "noche") === turno).length;
+  // Pedidos del tablero (las cuentas de mesa o barra van aparte, en Cuentas abiertas)
+  const enCurso = (turno) => abiertos.filter((p) => (p.turno ?? "noche") === turno && !p.es_cuenta).length;
+  const cuentasAbiertas = abiertos.filter((p) => p.es_cuenta).length;
   const nuevosSinConfirmar = abiertos.filter((p) => p.estado === "pendiente" && p.origen === "web").length;
 
   // El navegador solo deja sonar después de un toque: lo preparamos con el primero
@@ -251,7 +256,7 @@ function PanelContenido({ sesion, rol }) {
         </div>
         <nav className="sin-scrollbar mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4" role="tablist" aria-label="Secciones del panel">
           {secciones.map(({ id, nombre, Icono }) => {
-            const cantidad = id === "noche" || id === "mediodia" ? enCurso(id) : 0;
+            const cantidad = id === "noche" || id === "mediodia" ? enCurso(id) : id === "cuentas_abiertas" ? cuentasAbiertas : 0;
             const alerta = id === "noche" && nuevosSinConfirmar > 0;
             return (
               <button
@@ -269,10 +274,10 @@ function PanelContenido({ sesion, rol }) {
                 {cantidad > 0 && (
                   <span
                     className={`grid min-w-6 place-items-center rounded-full px-1.5 py-0.5 text-xs font-bold text-white ${
-                      alerta ? "animate-respirar bg-brasa" : id === "noche" ? "bg-noche" : "bg-mediodia"
+                      alerta ? "animate-respirar bg-brasa" : id === "noche" ? "bg-noche" : id === "cuentas_abiertas" ? "bg-cuenta" : "bg-mediodia"
                     }`}
-                    aria-label={`${cantidad} pedidos en curso`}
-                    title={`${cantidad} pedidos en curso`}
+                    aria-label={id === "cuentas_abiertas" ? `${cantidad} cuentas de mesa o barra abiertas` : `${cantidad} pedidos en curso`}
+                    title={id === "cuentas_abiertas" ? `${cantidad} cuentas de mesa o barra abiertas` : `${cantidad} pedidos en curso`}
                   >
                     {cantidad}
                   </span>
@@ -344,8 +349,26 @@ function PanelContenido({ sesion, rol }) {
               recargar(); // el stock de bebidas y golosinas cambió
             }}
           />
+        ) : seccion === "cuentas_abiertas" ? (
+          <CuentasAbiertas
+            comidas={datos.comidas}
+            categorias={datos.categorias}
+            actualizacion={version}
+            onCambio={() => {
+              revisar();
+              recargar(); // el stock de bebidas y golosinas cambió
+            }}
+          />
         ) : seccion === "cancha" ? (
-          <Cancha />
+          <Cancha
+            comidas={datos.comidas}
+            categorias={datos.categorias}
+            actualizacion={version}
+            onCambio={() => {
+              revisar();
+              recargar();
+            }}
+          />
         ) : seccion === "caja" ? (
           <Caja actualizacion={version} />
         ) : seccion === "cuentas" ? (

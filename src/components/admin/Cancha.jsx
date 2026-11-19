@@ -2,66 +2,60 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { supabase, mensajeDeError } from "../../lib/supabase";
 import { fechaInput, formatearFecha, formatearPesos } from "../../lib/formato";
-import { imprimirTicket, leerConfigImpresora } from "../../lib/impresion";
+import { leerConfigImpresora } from "../../lib/impresion";
 import { useCaja, useClientes } from "../../hooks/useCaja";
 import { useRol } from "../../hooks/useRol";
-import { IconoAnular, IconoBasura, IconoCalendario, IconoCheck, IconoEditar, IconoEfectivo, IconoMas, IconoPelota, IconoRecibo, IconoTransferencia } from "../ui/Iconos";
+import {
+  IconoAnular,
+  IconoBasura,
+  IconoCalendario,
+  IconoCheck,
+  IconoEditar,
+  IconoEfectivo,
+  IconoMas,
+  IconoPelota,
+  IconoRecibo,
+  IconoRegalo,
+  IconoTransferencia,
+  IconoVaso,
+} from "../ui/Iconos";
 import Cargando from "../ui/Cargando";
 import Confirmar from "../ui/Confirmar";
 import Modal from "../ui/Modal";
 import FormPagos from "./FormPagos";
-import { PAGO_INICIAL, pagoUsaCaja, pagosConMontos, validarPago } from "./pagosUtils";
+import CobrarTurno from "./CobrarTurno";
+import SumarACuenta from "./SumarACuenta";
+import EditarVenta from "./EditarVenta";
+import { PAGO_INICIAL, pagoUsaCaja, validarPago } from "./pagosUtils";
 import { desdeInput, hoyInput, textoPagos } from "./ventasUtils";
+import {
+  COLUMNAS_TURNO,
+  aHora,
+  aMinutos,
+  consumosDe,
+  estaCobrado,
+  estaSenado,
+  horario,
+  imprimirTicketDeVenta,
+  pagadoDe,
+  redondo,
+  restaDe,
+  textoDuracion,
+  totalTurnoDe,
+} from "./canchaUtils";
 
 // Horas que se muestran en la grilla del día (el turno puede empezar a cualquier hora)
 const HORAS = Array.from({ length: 16 }, (_, i) => i + 8); // de 08:00 a 24:00
 const DURACIONES = [60, 90, 120, 150, 180, 240];
 const DIAS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
 
-const COLUMNAS = "*, ventas(id, numero, estado, total, pagos(metodo, monto, nota, usuario))";
-
-// "20:00:00" → minutos desde las 00
-function aMinutos(hora) {
-  const [h, m] = String(hora).split(":").map(Number);
-  return h * 60 + m;
-}
-
-// 1290 → "21:30" (pasada la medianoche vuelve a 00:00)
-function aHora(minutos) {
-  const total = ((minutos % 1440) + 1440) % 1440;
-  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
-}
-
-function textoDuracion(minutos) {
-  const h = Math.floor(minutos / 60);
-  const m = minutos % 60;
-  return [h ? `${h} h` : "", m ? `${m} min` : ""].filter(Boolean).join(" ");
-}
-
-function horario(t) {
-  const inicio = aMinutos(t.desde);
-  return `${aHora(inicio)} a ${aHora(inicio + t.minutos)}`;
-}
-
-const redondo = (n) => Math.round(n * 100) / 100;
 const precioDe = (porHora, minutos) => redondo(Number(porHora || 0) * (minutos / 60));
 const porHoraDe = (precio, minutos) => String(redondo(Number(precio) / (minutos / 60)));
-
-// Estado de la plata de un turno: lo pagado (señas incluidas) y lo que falta
-const estaCobrado = (t) => t.ventas?.estado === "cerrado";
-const pagadoDe = (t) => (t.ventas?.pagos ?? []).reduce((acc, p) => acc + Number(p.monto), 0);
-const estaSenado = (t) => !estaCobrado(t) && pagadoDe(t) > 0;
-const restaDe = (t) => redondo(Number(t.precio) - pagadoDe(t));
 
 function sumarDias(fecha, dias) {
   const d = desdeInput(fecha);
   d.setDate(d.getDate() + dias);
   return fechaInput(d);
-}
-
-async function imprimirTicketDeVenta(ventaId) {
-  const { data } = await supabase.from("ventas").select("*, venta_items(*), pagos(metodo, monto)").eq("id", ventaId).single();
-  if (data) imprimirTicket(data, data.pagos ?? []);
 }
 
 function Resumen({ titulo, valor, detalle }) {
@@ -111,7 +105,8 @@ function CampoPrecio({ valor, onCambio, precioHora, bloqueado, ayuda }) {
 function FormTurno({ inicial, precioHora, onCerrar, onGuardado }) {
   const { esDueno } = useRol();
   const editando = Boolean(inicial.id);
-  const conPagos = editando && (estaCobrado(inicial) || estaSenado(inicial));
+  // Con cuenta (cobro, seña o consumos) el precio y la duración quedan fijos
+  const conPagos = editando && Boolean(inicial.venta_id);
   const { caja } = useCaja();
   const { clientes, recargar: recargarClientes } = useClientes(!editando);
   const [v, setV] = useState(() => ({
@@ -251,7 +246,13 @@ function FormTurno({ inicial, precioHora, onCerrar, onGuardado }) {
           onCambio={(precio) => set({ precioHora: precio })}
           precioHora={precioHora}
           bloqueado={conPagos}
-          ayuda={conPagos ? "Ya tiene una seña o un cobro: para cambiar el precio, el dueño tiene que anularlo." : undefined}
+          ayuda={
+            conPagos
+              ? estaCobrado(inicial) || estaSenado(inicial)
+                ? "Ya tiene una seña o un cobro: para cambiar el precio, el dueño tiene que anularlo."
+                : "Ya tiene consumos anotados: para cambiar el precio, sacalos de la cuenta."
+              : undefined
+          }
         />
         <div className="rounded-xl bg-fondo p-3">
           <p className="text-xs text-tinta-suave">Total del turno</p>
@@ -307,64 +308,6 @@ function FormTurno({ inicial, precioHora, onCerrar, onGuardado }) {
   );
 }
 
-// Cobra lo que falta del turno (si dejó seña, solo el resto)
-function CobrarTurno({ turno, onCerrar, onCobrado }) {
-  const { caja } = useCaja();
-  const { clientes, recargar: recargarClientes } = useClientes();
-  const [pago, setPago] = useState(PAGO_INICIAL);
-  const [conTicket, setConTicket] = useState(() => leerConfigImpresora().ticketAlCobrar);
-  const [guardando, setGuardando] = useState(false);
-  const total = restaDe(turno);
-  const sena = pagadoDe(turno);
-
-  async function cobrar() {
-    const { error: invalido, pagos } = validarPago(pago, total);
-    if (invalido) return toast.error(invalido);
-    if (pagoUsaCaja(pago) && !caja) return toast.error("Abrí la caja para cobrar en efectivo o por transferencia.");
-    setGuardando(true);
-    const { data, error } = await supabase.rpc("cobrar_turno_cancha", { turno_id: turno.id, pagos });
-    setGuardando(false);
-    if (error) return toast.error(mensajeDeError(error, "No se pudo registrar el cobro."));
-    if (conTicket) await imprimirTicketDeVenta(data.id);
-    toast.success(`Turno de ${turno.cliente_nombre} cobrado: ${formatearPesos(total)} (${textoPagos(pagosConMontos(pagos, total), formatearPesos)})`);
-    onCobrado();
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="rounded-2xl border-2 border-emerald-500 bg-emerald-50 p-4 text-center">
-        <p className="text-xs font-semibold uppercase tracking-wider text-emerald-800">{sena > 0 ? "Falta cobrar" : "Total a cobrar"}</p>
-        <p className="cifras mt-1 text-4xl font-bold text-emerald-900">{formatearPesos(total)}</p>
-        <p className="mt-1 text-sm text-emerald-900">
-          {turno.cliente_nombre} · {formatearFecha(turno.fecha)} · {horario(turno)} ({textoDuracion(turno.minutos)})
-        </p>
-        {sena > 0 && (
-          <p className="cifras mt-1 text-xs text-emerald-800">
-            Turno {formatearPesos(turno.precio)} − seña {formatearPesos(sena)}
-          </p>
-        )}
-      </div>
-
-      <FormPagos total={total} valor={pago} onCambio={setPago} clientes={clientes} onClienteCreado={recargarClientes} />
-
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" className="size-4 accent-palmera" checked={conTicket} onChange={(e) => setConTicket(e.target.checked)} />
-        Imprimir el ticket para el cliente
-      </label>
-
-      <div className="grid gap-2 sm:grid-cols-[auto_1fr]">
-        <button type="button" className="boton-secundario" onClick={onCerrar} disabled={guardando}>
-          Volver
-        </button>
-        <button type="button" className="boton bg-emerald-600 py-3 text-base text-white hover:bg-emerald-700" onClick={cobrar} disabled={guardando}>
-          <IconoCheck className="size-5" /> {guardando ? "Registrando cobro…" : "Cobrar turno"}
-        </button>
-      </div>
-      <p className="text-xs text-tinta-suave">El cobro queda en la caja abierta y en Finanzas como venta de la cancha.</p>
-    </div>
-  );
-}
-
 // Seña: una parte del precio, en efectivo o por transferencia (entra en la caja)
 function SenarTurno({ turno, onCerrar, onSenado }) {
   const { caja } = useCaja();
@@ -394,7 +337,7 @@ function SenarTurno({ turno, onCerrar, onSenado }) {
           {turno.cliente_nombre} · {formatearFecha(turno.fecha)} · {horario(turno)}
         </p>
         <p className="cifras text-tinta-suave">
-          Turno {formatearPesos(turno.precio)}
+          {consumosDe(turno).length > 0 ? `Alquiler y consumos ${formatearPesos(totalTurnoDe(turno))}` : `Turno ${formatearPesos(turno.precio)}`}
           {pagadoDe(turno) > 0 && ` · ya señó ${formatearPesos(pagadoDe(turno))}`} · falta {formatearPesos(resta)}
         </p>
       </div>
@@ -683,11 +626,13 @@ function PrecioCancha({ precioHora, onCerrar, onGuardado }) {
   );
 }
 
-function TarjetaTurno({ turno, onCobrar, onSenar, onEditar, onBorrar, onAnular, onNoVino }) {
+function TarjetaTurno({ turno, onCobrar, onSenar, onEditar, onBorrar, onAnular, onNoVino, onSumar, onRegalo, onEditarConsumos }) {
   const { esDueno } = useRol();
   const cobrado = estaCobrado(turno);
   const senado = estaSenado(turno);
   const pagos = turno.ventas?.pagos ?? [];
+  const consumos = consumosDe(turno);
+  const totalConsumos = consumos.reduce((acc, i) => acc + Number(i.subtotal), 0);
   return (
     <li className={`tarjeta grid gap-3 p-4 sm:grid-cols-[110px_minmax(0,1fr)_auto] sm:items-center ${cobrado ? "" : "bg-cancha-suave/40"}`}>
       <div>
@@ -700,8 +645,36 @@ function TarjetaTurno({ turno, onCobrar, onSenar, onEditar, onBorrar, onAnular, 
           {turno.fijo_id && <Etiqueta clase="border-cancha/40 bg-cancha-suave text-cancha">Fijo</Etiqueta>}
         </p>
         <p className="text-xs text-tinta-suave">{[turno.cliente_telefono, turno.nota].filter(Boolean).join(" · ") || "Sin notas"}</p>
+        {consumos.length > 0 && (
+          <ul className="mt-1.5 space-y-0.5 rounded-lg bg-papel/70 px-2 py-1.5 text-xs">
+            {consumos.map((i) => (
+              <li key={i.id} className="flex justify-between gap-2">
+                <span className="min-w-0 truncate">
+                  <strong>{i.cantidad}x</strong> {i.nombre}
+                  {i.regalo && (
+                    <span className="ml-1 inline-flex items-center gap-0.5 font-semibold text-regalo">
+                      <IconoRegalo className="size-3" /> regalo
+                    </span>
+                  )}
+                </span>
+                <span className="cifras shrink-0">{i.regalo ? "$ 0" : formatearPesos(i.subtotal)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
         <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">
-          <span className="cifras font-semibold">{formatearPesos(turno.precio)}</span>
+          <span className="cifras font-semibold">
+            {consumos.length > 0 ? (
+              <>
+                {formatearPesos(totalTurnoDe(turno))}{" "}
+                <span className="text-xs font-normal text-tinta-suave">
+                  (alquiler {formatearPesos(turno.precio)} + consumos {formatearPesos(totalConsumos)})
+                </span>
+              </>
+            ) : (
+              formatearPesos(turno.precio)
+            )}
+          </span>
           {cobrado ? (
             <Etiqueta clase="border-emerald-300 bg-emerald-100 text-emerald-900">
               Cobrado #{turno.ventas.numero} · {textoPagos(pagos, formatearPesos)}
@@ -725,12 +698,23 @@ function TarjetaTurno({ turno, onCobrar, onSenar, onEditar, onBorrar, onAnular, 
             <button type="button" className="boton bg-emerald-600 px-3 py-2 text-xs text-white hover:bg-emerald-700" onClick={onCobrar}>
               <IconoCheck className="size-4" /> Cobrar
             </button>
+            <button type="button" className="boton-secundario px-3 py-2 text-xs" onClick={onSumar} title="Anotar lo que consumen: se cobra junto con el alquiler">
+              <IconoVaso className="size-4" /> Consumos
+            </button>
+            <button type="button" className="boton-secundario px-3 py-2 text-xs text-regalo" onClick={onRegalo} title="Anotar algo de regalo (ej.: la cerveza que va con la cancha)">
+              <IconoRegalo className="size-4" /> Regalo
+            </button>
             <button type="button" className="boton-secundario px-3 py-2 text-xs" onClick={onSenar}>
               Señar
             </button>
+            {consumos.length > 0 && (
+              <button type="button" className="boton-secundario px-3 py-2 text-xs" onClick={onEditarConsumos} title="Corregir o sacar consumos">
+                <IconoEditar className="size-4" /> Corregir consumos
+              </button>
+            )}
           </>
         )}
-        {esDueno && senado && (
+        {esDueno && senado && consumos.length === 0 && (
           <button type="button" className="boton-secundario px-3 py-2 text-xs" onClick={onNoVino}>
             No vino
           </button>
@@ -760,7 +744,7 @@ function TarjetaTurno({ turno, onCobrar, onSenar, onEditar, onBorrar, onAnular, 
 
 // Cancha de fútbol: turnos de alquiler por hora, señas, turnos fijos y su cobro.
 // Lo cobrado entra en la caja y en Finanzas como venta de la "Cancha".
-export default function Cancha() {
+export default function Cancha({ comidas = [], categorias = [], actualizacion = 0, onCambio }) {
   const { esDueno } = useRol();
   const [fecha, setFecha] = useState(hoyInput);
   const [recarga, setRecarga] = useState(0);
@@ -772,11 +756,16 @@ export default function Cancha() {
   const [aBorrar, setABorrar] = useState(null);
   const [aAnular, setAAnular] = useState(null);
   const [noVino, setNoVino] = useState(null);
+  const [aSumar, setASumar] = useState(null); // { tipo: "turno", turno, regalo }
+  const [consumosAEditar, setConsumosAEditar] = useState(null); // venta del turno
   const [verFijos, setVerFijos] = useState(false);
   const [editarPrecio, setEditarPrecio] = useState(false);
   const [procesando, setProcesando] = useState(false);
 
-  const recargar = useCallback(() => setRecarga((n) => n + 1), []);
+  const recargar = useCallback(() => {
+    setRecarga((n) => n + 1);
+    onCambio?.();
+  }, [onCambio]);
 
   // Precio por hora que fijó el dueño (null = no lo cargó)
   useEffect(() => {
@@ -793,12 +782,12 @@ export default function Cancha() {
   }, [recarga]);
 
   // Antes de leer el día, la base anota los turnos fijos que tocan ese día
-  const clave = `${fecha}-${recarga}`;
+  const clave = `${fecha}-${recarga}-${actualizacion}`;
   useEffect(() => {
     let activo = true;
     supabase
       .rpc("preparar_turnos_fijos", { fecha })
-      .then(() => supabase.from("cancha_turnos").select(COLUMNAS).eq("fecha", fecha).order("desde"))
+      .then(() => supabase.from("cancha_turnos").select(COLUMNAS_TURNO).eq("fecha", fecha).order("desde"))
       .then(({ data, error }) => activo && setResultado({ clave, turnos: data ?? [], error }));
     return () => {
       activo = false;
@@ -940,7 +929,10 @@ export default function Cancha() {
             );
           })}
         </div>
-        <p className="mt-1 text-xs text-tinta-suave">Verde lleno: cobrado · Verde medio: señado · Verde claro: reservado, falta cobrar.</p>
+        <p className="mt-1 text-xs text-tinta-suave">
+          Verde lleno: cobrado · Verde medio: señado · Verde claro: reservado, falta cobrar. Si se quedan consumiendo, anotalo en "Consumos" del turno
+          y se cobra todo junto.
+        </p>
       </div>
 
       {cargando ? (
@@ -967,6 +959,9 @@ export default function Cancha() {
               onBorrar={() => setABorrar(t)}
               onAnular={() => setAAnular(t)}
               onNoVino={() => setNoVino(t)}
+              onSumar={() => setASumar({ tipo: "turno", turno: t })}
+              onRegalo={() => setASumar({ tipo: "turno", turno: t, regalo: true })}
+              onEditarConsumos={() => setConsumosAEditar(t.ventas)}
             />
           ))}
         </ul>
@@ -992,6 +987,15 @@ export default function Cancha() {
       <Modal abierto={Boolean(aCobrar)} onCerrar={() => setACobrar(null)} titulo="Cobrar turno de cancha" ancho="max-w-lg">
         {aCobrar && <CobrarTurno key={aCobrar.id} turno={aCobrar} onCerrar={() => setACobrar(null)} onCobrado={terminar(setACobrar)} />}
       </Modal>
+
+      <SumarACuenta destino={aSumar} comidas={comidas} categorias={categorias} onCerrar={() => setASumar(null)} onListo={terminar(setASumar)} />
+
+      <EditarVenta
+        venta={consumosAEditar}
+        comidas={comidas}
+        onCerrar={() => setConsumosAEditar(null)}
+        onGuardada={terminar(setConsumosAEditar)}
+      />
 
       <Modal abierto={Boolean(aSenar)} onCerrar={() => setASenar(null)} titulo="Registrar seña" ancho="max-w-md">
         {aSenar && <SenarTurno key={aSenar.id} turno={aSenar} onCerrar={() => setASenar(null)} onSenado={terminar(setASenar)} />}
@@ -1037,7 +1041,7 @@ export default function Cancha() {
       <Confirmar
         abierto={Boolean(aAnular)}
         titulo={aAnular && estaCobrado(aAnular) ? "Anular el cobro del turno" : "Anular la seña"}
-        mensaje="Se borra lo cobrado del turno, señas incluidas (sale de la caja y de la cuenta corriente, si se había fiado), y el turno queda reservado sin cobrar. Si ya está en un arqueo cerrado, no se puede anular."
+        mensaje="Se borra lo cobrado del turno, señas incluidas (sale de la caja y de la cuenta corriente, si se había fiado), y el turno queda sin cobrar. Lo que consumieron sigue anotado en su cuenta. Si ya está en un arqueo cerrado, no se puede anular."
         textoConfirmar="Anular"
         procesando={procesando}
         onConfirmar={() => accion(() => supabase.rpc("anular_cobro_cancha", { turno_id: aAnular.id }), "Cobro anulado: el turno quedó sin cobrar", "No se pudo anular el cobro.")}

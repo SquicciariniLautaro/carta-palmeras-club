@@ -8,7 +8,7 @@ import { IconoCheck } from "../ui/Iconos";
 import Modal from "../ui/Modal";
 import FormPagos from "./FormPagos";
 import { PAGO_INICIAL, pagoUsaCaja, pagosConMontos, validarPago } from "./pagosUtils";
-import { unidadesDeVenta } from "./ventasUtils";
+import { faltaCobrar, pagadoDeVenta, unidadesDeVenta, valorRegalos } from "./ventasUtils";
 
 function Contenido({ venta, onCerrar, onCobrada }) {
   const { caja } = useCaja();
@@ -16,13 +16,21 @@ function Contenido({ venta, onCerrar, onCobrada }) {
   const [pago, setPago] = useState(PAGO_INICIAL);
   const [conTicket, setConTicket] = useState(() => leerConfigImpresora().ticketAlCobrar);
   const [guardando, setGuardando] = useState(false);
-  const total = Number(venta.total);
+  // Si ya pagó una parte (seña), se cobra solo lo que falta
+  const total = faltaCobrar(venta);
+  const pagado = pagadoDeVenta(venta);
+  const regalos = valorRegalos(venta.venta_items);
+  const sinNadaQueCobrar = total === 0;
   const unidades = unidadesDeVenta(venta);
 
   async function cobrar() {
-    const { error: invalido, pagos } = validarPago(pago, total);
-    if (invalido) return toast.error(invalido);
-    if (pagoUsaCaja(pago) && !caja) return toast.error("Abrí la caja para cobrar en efectivo o por transferencia.");
+    let pagos = [];
+    if (!sinNadaQueCobrar) {
+      const validacion = validarPago(pago, total);
+      if (validacion.error) return toast.error(validacion.error);
+      if (pagoUsaCaja(pago) && !caja) return toast.error("Abrí la caja para cobrar en efectivo o por transferencia.");
+      pagos = validacion.pagos;
+    }
     setGuardando(true);
     const { error } = await supabase.rpc("cobrar_venta", { venta_id: venta.id, pagos });
     setGuardando(false);
@@ -41,6 +49,12 @@ function Contenido({ venta, onCerrar, onCobrada }) {
         <p className="mt-1 text-sm text-emerald-900">
           {venta.cliente_nombre || "Sin nombre"} · {unidades} producto{unidades === 1 ? "" : "s"} · {formatearFechaHora(venta.created_at)}
         </p>
+        {pagado > 0 && (
+          <p className="cifras mt-1 text-xs text-emerald-800">
+            Cuenta {formatearPesos(venta.total)} − ya pagó {formatearPesos(pagado)}
+          </p>
+        )}
+        {regalos > 0 && <p className="cifras mt-1 text-xs font-semibold text-regalo">Incluye regalos por {formatearPesos(regalos)} (no se cobran)</p>}
       </div>
 
       <details className="rounded-xl bg-fondo p-3 text-sm">
@@ -52,13 +66,17 @@ function Contenido({ venta, onCerrar, onCobrada }) {
                 <strong>{i.cantidad}x</strong> {i.nombre}
                 {i.detalle && <span className="text-tinta-suave"> · {i.detalle}</span>}
               </span>
-              <span className="cifras shrink-0">{formatearPesos(i.subtotal)}</span>
+              <span className="cifras shrink-0">{i.regalo ? "Regalo" : formatearPesos(i.subtotal)}</span>
             </li>
           ))}
         </ul>
       </details>
 
-      <FormPagos total={total} valor={pago} onCambio={setPago} clientes={clientes} onClienteCreado={recargarClientes} />
+      {sinNadaQueCobrar ? (
+        <p className="rounded-xl bg-fondo p-3 text-sm">No queda nada por cobrar: la cuenta se cierra en $ 0, sin pasar por la caja.</p>
+      ) : (
+        <FormPagos total={total} valor={pago} onCambio={setPago} clientes={clientes} onClienteCreado={recargarClientes} />
+      )}
 
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" className="size-4 accent-palmera" checked={conTicket} onChange={(e) => setConTicket(e.target.checked)} />

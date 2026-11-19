@@ -235,12 +235,13 @@ export function facturacionPorDia(ventas, desde, hasta) {
   return dias;
 }
 
-// Las 5 comidas más vendidas (por unidades) entre las ventas cobradas
+// Las 5 comidas más vendidas (por unidades) entre las ventas cobradas (sin los regalos)
 export function masVendidas(ventas, limite = 5) {
   const porNombre = new Map();
   for (const v of ventas) {
     if (v.estado !== "cerrado") continue;
     for (const item of v.venta_items ?? []) {
+      if (item.regalo) continue;
       const clave = item.comida_id ?? `nombre:${item.nombre}`;
       const actual = porNombre.get(clave) ?? { nombre: item.nombre, unidades: 0, total: 0 };
       actual.unidades += item.cantidad;
@@ -249,4 +250,24 @@ export function masVendidas(ventas, limite = 5) {
     }
   }
   return [...porNombre.values()].sort((a, b) => b.unidades - a.unidades || b.total - a.total).slice(0, limite);
+}
+
+// Lo que valen en la carta los regalos de una lista de productos
+export function valorRegalos(items) {
+  return (items ?? []).filter((i) => i.regalo).reduce((acc, i) => acc + Number(i.precio_lista ?? 0) * i.cantidad, 0);
+}
+
+// Lo que ya se pagó de una venta (señas) y lo que falta
+export function pagadoDeVenta(venta) {
+  return (venta?.pagos ?? []).reduce((acc, p) => acc + Number(p.monto), 0);
+}
+
+export function faltaCobrar(venta) {
+  return Math.round((Number(venta.total) - pagadoDeVenta(venta)) * 100) / 100;
+}
+
+// Carta que se usa según la hora: hasta las 17 h el mediodía, después la noche
+export function turnoPorHora(fecha = new Date()) {
+  const hora = fecha.getHours();
+  return hora >= 6 && hora < 17 ? "mediodia" : "noche";
 }

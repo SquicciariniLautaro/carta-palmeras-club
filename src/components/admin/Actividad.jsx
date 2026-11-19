@@ -20,7 +20,7 @@ const TIPOS = {
 };
 
 // Acciones que conviene mirar con atención (plata que sale o se borra)
-const DELICADAS = /Anuló|Borró|Canceló|Retiro|Ajustó|Cambió el precio|no vino|Liberó/;
+const DELICADAS = /Anuló|Borró|Canceló|Retiro|Ajustó|Cambió el precio|no vino|Liberó|regalo|Sacó/;
 
 const LIMITE = 3000;
 

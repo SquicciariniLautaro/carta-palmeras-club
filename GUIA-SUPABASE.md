@@ -217,6 +217,21 @@ Corré `supabase/actualizacion-2026-10-29-platos-mediodia.sql` (SQL Editor → N
 
 Los platos entran **sin precio y no disponibles**. Al final muestra las 5 categorías con cuántos platos tiene cada una (10, 12, 5, 9 y 8) y cuántos siguen sin precio. **Después, el dueño les pone el precio** en Venta mediodía → Platos → Editar: al guardar, el plato queda disponible para vender y para el Menú del día. Mientras no tenga precio no se puede vender ni marcar como disponible.
 
+## Actualización del 18/11/2026: los empleados agregan y editan comidas
+
+Corré `supabase/actualizacion-2026-11-18-empleados-comidas.sql`. Desde ahí el empleado puede crear comidas y cambiar nombre, precio, foto y opciones; borrar una comida sigue siendo solo del dueño. Cada cambio queda en Actividad.
+
+## Actualización del 19/11/2026: cuentas abiertas, consumos en la cancha, regalos y platos del mediodía a $ 7.500
+
+Corré `supabase/actualizacion-2026-11-19-cuentas-cancha-regalos.sql` (SQL Editor → New query → pegar todo → Run), **después** de las anteriores. No borra datos y se puede volver a correr. Agrega:
+
+- **Cuentas abiertas:** una sección nueva del panel para las mesas y la barra que van pidiendo y pagan al final, aparte de los pedidos de delivery y de la carta. Las ventas en caja que estaban abiertas pasan solas a esta sección.
+- **Consumos en la cancha:** lo que toman o comen los que alquilan se anota en el mismo turno y se cobra todo junto con el alquiler.
+- **Regalos:** la cerveza que va con la cancha, una vuelta de la casa… se anotan a $ 0, descuentan el stock y quedan registrados con lo que valen en la carta (Finanzas → Regalos y en Actividad).
+- **Platos del mediodía a $ 7.500:** todos los platos de cocina del mediodía quedan a $ 7.500 y disponibles (bebidas y golosinas no se tocan). El que vale más se cambia en Venta mediodía → Platos → Editar. Si volvés a correr el archivo, **no** vuelve a pisar los precios.
+
+Al final muestra cada categoría del mediodía con su cantidad de platos, el precio más bajo y el más alto.
+
 ## Si algo no anda
 
 | Qué ves | Qué pasa | Cómo se arregla |
@@ -235,7 +250,9 @@ Los platos entran **sin precio y no disponibles**. Al final muestra las 5 catego
   Si los pedidos nuevos tardan hasta 30 segundos en aparecer, el tiempo real no está activo: en Supabase andá a **Database → Publications → supabase_realtime** y activá la tabla `ventas` (el SQL ya lo intenta hacer solo).
 - **Horario de atención:** se carga en el panel, pestaña **Horarios**. Fuera de horario la carta muestra "Ahora estamos cerrados · Abrimos hoy a las 20:00 hs" y no deja mandar el pedido (la base también lo rechaza). Si cierran después de medianoche, poné por ejemplo 20:00 a 01:00. Misma hora en los dos campos = todo el día.
 - **Stock:** solo lo llevan las categorías marcadas como **Kiosco** (Bebidas y Golosinas; se marca en Categorías). Se maneja en la pestaña **Stock** de cada turno: "Cargar mercadería" suma lo que entra (empleado o dueño) y "Ajustar" corrige con lo que se contó (solo el dueño). Cada venta lo descuenta sola y todo queda en el historial, con quién lo hizo. Arriba del panel aparece un aviso cuando algo llega al mínimo. Con stock 0 la comida deja de verse en la carta; en el local se puede vender igual (queda en negativo para que se vea la diferencia). Las comidas de cocina no llevan stock: si un día no hay algo, desactivala (interruptor **Activo**).
-- **Cancha:** pestaña **Cancha** del panel. Se reservan turnos por hora (no deja pisar dos turnos) y se cobran como cualquier venta: efectivo, transferencia o cuenta corriente, con la caja abierta. Si dejan **seña** se registra con "Señar" (entra en la caja) y al cobrar se cobra solo lo que falta; si no vienen, el dueño lo cierra con "No vino" y queda la seña. Los **turnos fijos** ("Turnos fijos") se anotan solos cada semana; si un día no vienen, "Liberar día".
+- **Cancha:** pestaña **Cancha** del panel. Se reservan turnos por hora (no deja pisar dos turnos) y se cobran como cualquier venta: efectivo, transferencia o cuenta corriente, con la caja abierta. Si se quedan tomando o comiendo, se anota en **Consumos** del mismo turno y al cobrar se cobra todo junto (alquiler + consumos). Si dejan **seña** se registra con "Señar" (entra en la caja) y al cobrar se cobra solo lo que falta; si no vienen, el dueño lo cierra con "No vino" y queda la seña. Los **turnos fijos** ("Turnos fijos") se anotan solos cada semana; si un día no vienen, "Liberar día".
+- **Cuentas abiertas (pagan al final):** pestaña **Cuentas abiertas**. "Nueva cuenta" abre una mesa o una cuenta de barra con lo primero que piden; después cada tarjeta tiene **Sumar** (lo que van pidiendo), **Regalo**, **Precuenta** (ticket para mostrar cuánto van) y **Cobrar y cerrar**. Ahí también aparecen los turnos de cancha de hoy (y de los últimos días) que falta cobrar. Arriba se ve cuánto falta cobrar en total. Los pedidos de delivery y de la carta siguen en Venta noche, aparte.
+- **Regalos:** botón **Regalo** en cada cuenta o turno de cancha, o **Anotar regalo** para uno suelto (sin cuenta). Va a $ 0, descuenta el stock y queda anotado con lo que vale en la carta: se ve en Cuentas abiertas ("Regalado hoy"), en Finanzas (Regalos y cortesías, y hoja Regalos del Excel) y, para el dueño, en Actividad con quién lo anotó. No se resta otra vez de la ganancia porque lo que costó la mercadería ya está en Gastos.
 - **Fotos:** se suben desde el panel (Comidas → Editar). Se achican solas a 1200 px, se guardan en Cloudinary en WebP y en la carta se ven centradas en la comida.
 - **Seguridad:** la clave que usa la página es pública a propósito. Lo que protege los datos son las reglas (RLS) del archivo SQL: cualquiera puede ver el menú y mandar un pedido, pero solo el administrador puede cambiar productos o ver las ventas.
 - **Copias de seguridad:** el plan gratuito de Supabase pausa los proyectos sin uso durante una semana. Si pasa, entrá al panel de Supabase y tocá **Restore project**.
